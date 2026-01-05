@@ -12,10 +12,23 @@ from scipy.spatial import Delaunay
 def load_point_cloud(filepath: Path) -> np.ndarray:
     """Load point cloud data from file.
     
-    File format: ID X Y Z (space-separated)
+    File format: Either X Y Z (3 columns) or ID X Y Z (4 columns), space-separated.
     Returns (N, 3) array with X, Y, Z columns.
     """
-    data = np.loadtxt(filepath, usecols=(1, 2, 3))
+    # First, detect number of columns
+    with open(filepath) as f:
+        first_line = f.readline().strip()
+    num_cols = len(first_line.split())
+    
+    if num_cols == 3:
+        # X Y Z format
+        data = np.loadtxt(filepath, usecols=(0, 1, 2))
+    elif num_cols >= 4:
+        # ID X Y Z format (ignore ID)
+        data = np.loadtxt(filepath, usecols=(1, 2, 3))
+    else:
+        raise ValueError(f"Expected 3 or 4 columns, got {num_cols}")
+    
     return data
 
 
@@ -43,7 +56,7 @@ def create_triangulation_with_filter(
     
     Args:
         points: (N, 3) array with X, Y, Z coordinates
-        max_distance: Maximum allowed edge length. If None, uses 1.5× median.
+        max_distance: Maximum allowed edge length. If None, uses 3× median.
     
     Returns:
         Triangulation object and boolean mask for invalid triangles.
