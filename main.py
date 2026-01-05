@@ -256,7 +256,7 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("contour_lines.txt"),
+        default=Path("./data/out/contour_lines.txt"),
         help="Output file path (default: contour_lines.txt)"
     )
     parser.add_argument(
@@ -309,13 +309,16 @@ def main():
     # Export contours
     if args.format == "geojson":
         output_path = args.output.with_suffix('.geojson') if args.output.suffix == '.txt' else args.output
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         export_contours_geojson(contours, output_path)
     else:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         export_contours_txt(contours, args.output)
     
     # Create visualization if requested
     if args.plot:
         print("\nCreating visualization...")
+        args.plot.parent.mkdir(parents=True, exist_ok=True)
         create_visualization(triangulation, points[:, 2], levels, args.plot)
     
     print("\nDone!")
