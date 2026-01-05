@@ -5,7 +5,7 @@ Generate contour lines from terrain point cloud data with Delaunay triangulation
 ## Usage
 
 ```bash
-uv run python main.py data/zakazka-body.txt [options]
+uv run python -m contourer.main data/zakazka-body.txt [options]
 ```
 
 ### Options
@@ -22,10 +22,10 @@ uv run python main.py data/zakazka-body.txt [options]
 
 ```bash
 # Auto levels with visualization
-uv run python main.py data/zakazka-body.txt --plot map.png
+uv run python -m contourer.main data/zakazka-body.txt --plot map.png
 
 # Custom levels with GeoJSON export
-uv run python main.py data/zakazka-body.txt --levels 495 496 497 498 499 500 --format geojson
+uv run python -m contourer.main data/zakazka-body.txt --levels 495 496 497 498 499 500 --format geojson
 ```
 
 ## Input Format
