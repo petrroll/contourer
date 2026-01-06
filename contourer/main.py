@@ -369,12 +369,6 @@ def main():
         help="Max triangle edge length filter (default: 1.5× median)"
     )
     parser.add_argument(
-        "--output",
-        type=Path,
-        default=Path("./data/out/contour_lines.txt"),
-        help="Output file path (default: contour_lines.txt)"
-    )
-    parser.add_argument(
         "--format",
         choices=["txt", "geojson"],
         default="txt",
@@ -382,8 +376,8 @@ def main():
     )
     parser.add_argument(
         "--plot",
-        type=Path,
-        help="Save visualization to PDF file (e.g., map.pdf)"
+        action="store_true",
+        help="Generate visualization PDF"
     )
     parser.add_argument(
         "--show-points",
@@ -397,6 +391,13 @@ def main():
     if not args.file_path.exists():
         print(f"Error: File '{args.file_path}' not found")
         return 1
+    
+    # Derive output paths from input filename
+    input_stem = args.file_path.stem
+    output_dir = Path("./data/out")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    contour_output_path = output_dir / f"{input_stem}_contour.txt"
+    map_output_path = output_dir / f"{input_stem}_map.pdf"
     
     print(f"Loading point cloud: {args.file_path}")
     
@@ -438,18 +439,15 @@ def main():
     
     # Export contours
     if args.format == "geojson":
-        output_path = args.output.with_suffix('.geojson') if args.output.suffix == '.txt' else args.output
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        export_contours_geojson(contours, output_path)
+        geojson_path = contour_output_path.with_suffix('.geojson')
+        export_contours_geojson(contours, geojson_path)
     else:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        export_contours_txt(contours, args.output)
+        export_contours_txt(contours, contour_output_path)
     
     # Create visualization if requested
     if args.plot:
         print("\nCreating visualization...")
-        args.plot.parent.mkdir(parents=True, exist_ok=True)
-        create_visualization(triangulation, points[:, 2], levels, args.plot, major_levels, args.show_points)
+        create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
     
     print("\nDone!")
     return 0
