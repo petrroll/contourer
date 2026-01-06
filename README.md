@@ -25,6 +25,8 @@ Output files are automatically named based on the input filename and saved to `.
 | `--format {txt,geojson}` | Export format (default: txt) |
 | `--plot` | Generate visualization PDF |
 | `--show-points` | Show original data points on the visualization |
+| `--web` | Launch interactive browser-based viewer |
+| `--port 5000` | Port for web server (default: 5000) |
 
 ### Examples
 
@@ -40,7 +42,29 @@ uv run contourer data/zakazka-body.txt --plot --show-points
 
 # Custom levels with GeoJSON export
 uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500 --format geojson
+
+# Launch interactive web viewer
+uv run contourer data/zakazka-body.txt --web
+
+# Web viewer on custom port
+uv run contourer data/zakazka-body.txt --web --port 8080
 ```
+
+## Interactive Web Viewer
+
+Launch a browser-based interactive map with `--web`:
+
+```bash
+uv run contourer data/zakazka-body.txt --web
+```
+
+**Features:**
+- 🔍 **Zoom & Pan** - Contour lines maintain constant width at any zoom level
+- ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
+- 📍 **Show Points** - Toggle original data points visibility
+- 🎨 **Color Schemes** - Switch between Terrain, Viridis, Monochrome, Topographic
+- 🏷️ **Elevation Labels** - Toggle labels on major contours
+- 💡 **Hover Tooltips** - See exact elevation on hover
 
 ## Input Format
 

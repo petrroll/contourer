@@ -384,6 +384,17 @@ def main():
         action="store_true",
         help="Show original data points on the visualization"
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch interactive browser-based viewer"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=5000,
+        help="Port for web server (default: 5000)"
+    )
     
     args = parser.parse_args()
     
@@ -391,6 +402,12 @@ def main():
     if not args.file_path.exists():
         print(f"Error: File '{args.file_path}' not found")
         return 1
+    
+    # Launch web viewer if requested
+    if args.web:
+        from .web import run_web_server
+        run_web_server(args.file_path, port=args.port)
+        return 0
     
     # Derive output paths from input filename
     input_stem = args.file_path.stem

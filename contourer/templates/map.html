@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contour Viewer - {{ filename }}</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        #container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        #sidebar {
+            width: 320px;
+            background: #fff;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #e0e0e0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        
+        #map {
+            flex: 1;
+            background: #fafafa;
+        }
+        
+        h1 {
+            font-size: 1.4em;
+            margin-bottom: 5px;
+            color: #2e7d32;
+        }
+        
+        .subtitle {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section h2 {
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #fff;
+            background: #4caf50;
+            padding: 8px 12px;
+            margin: 0 -20px 15px -20px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #fff;
+            color: #333;
+            font-size: 0.95em;
+        }
+        
+        input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: #4caf50;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .checkbox-group input {
+            width: 18px;
+            height: 18px;
+            accent-color: #4caf50;
+        }
+        
+        .checkbox-group label {
+            margin: 0;
+            color: #333;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            background: #4caf50;
+            color: white;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #66bb6a;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .stats {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .stats-row:last-child {
+            border-bottom: none;
+        }
+        
+        .stats-label {
+            color: #666;
+        }
+        
+        .stats-value {
+            color: #2e7d32;
+            font-weight: 600;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            text-align: center;
+        }
+        
+        .status.loading {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.85em;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .legend-line {
+            width: 30px;
+            height: 0;
+        }
+        
+        .legend-line.major {
+            border-top: 2px solid #333;
+        }
+        
+        .legend-line.minor {
+            border-top: 1px solid #888;
+        }
+        
+        /* Custom elevation tooltip */
+        .elevation-tooltip {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #4caf50;
+            border-radius: 4px;
+            padding: 5px 10px;
+            font-size: 12px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <h1>🗺️ Contour Viewer</h1>
+            <p class="subtitle">{{ filename }}</p>
+            
+            <div class="section">
+                <h2>Data Info</h2>
+                <div class="stats">
+                    <div class="stats-row">
+                        <span class="stats-label">Points</span>
+                        <span class="stats-value">{{ num_points }}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Z Min</span>
+                        <span class="stats-value">{{ "%.2f"|format(z_min) }}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Z Max</span>
+                        <span class="stats-value">{{ "%.2f"|format(z_max) }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Contour Settings</h2>
+                
+                <div class="control-group">
+                    <label for="minor-interval">Minor Interval (m)</label>
+                    <input type="number" id="minor-interval" value="0.2" min="0.01" step="0.1">
+                </div>
+                
+                <div class="control-group">
+                    <label for="major-interval">Major Interval (m)</label>
+                    <input type="number" id="major-interval" value="1.0" min="0.1" step="0.5">
+                </div>
+                
+                <div class="control-group">
+                    <label for="max-distance">Max Edge Distance (0 = auto)</label>
+                    <input type="number" id="max-distance" value="0" min="0" step="0.5">
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Display Options</h2>
+                
+                <div class="control-group checkbox-group">
+                    <input type="checkbox" id="show-points">
+                    <label for="show-points">Show Data Points</label>
+                </div>
+                
+                <div class="control-group checkbox-group">
+                    <input type="checkbox" id="show-labels" checked>
+                    <label for="show-labels">Show Elevation Labels</label>
+                </div>
+                
+                <div class="control-group">
+                    <label for="color-scheme">Color Scheme</label>
+                    <select id="color-scheme">
+                        <option value="terrain">Terrain</option>
+                        <option value="viridis">Viridis</option>
+                        <option value="mono">Monochrome</option>
+                        <option value="topo">Topographic</option>
+                    </select>
+                </div>
+                
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-line major"></div>
+                        <span>Major</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-line minor"></div>
+                        <span>Minor</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <button id="update-btn">Update Contours</button>
+            </div>
+            
+            <div class="section">
+                <div id="status" class="status loading">Loading...</div>
+            </div>
+            
+            <div class="section">
+                <h2>Contour Stats</h2>
+                <div class="stats" id="contour-stats">
+                    <div class="stats-row">
+                        <span class="stats-label">Levels</span>
+                        <span class="stats-value" id="stat-levels">-</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label">Segments</span>
+                        <span class="stats-value" id="stat-segments">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="map"></div>
+    </div>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Settings persistence
+        const STORAGE_KEY = 'contour-viewer-settings';
+        
+        function saveSettings() {
+            const settings = {
+                minorInterval: document.getElementById('minor-interval').value,
+                majorInterval: document.getElementById('major-interval').value,
+                maxDistance: document.getElementById('max-distance').value,
+                showPoints: document.getElementById('show-points').checked,
+                showLabels: document.getElementById('show-labels').checked,
+                colorScheme: document.getElementById('color-scheme').value,
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+        }
+        
+        function loadSettings() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                try {
+                    const settings = JSON.parse(stored);
+                    if (settings.minorInterval) document.getElementById('minor-interval').value = settings.minorInterval;
+                    if (settings.majorInterval) document.getElementById('major-interval').value = settings.majorInterval;
+                    if (settings.maxDistance) document.getElementById('max-distance').value = settings.maxDistance;
+                    if (settings.showPoints !== undefined) document.getElementById('show-points').checked = settings.showPoints;
+                    if (settings.showLabels !== undefined) document.getElementById('show-labels').checked = settings.showLabels;
+                    if (settings.colorScheme) document.getElementById('color-scheme').value = settings.colorScheme;
+                } catch (e) {
+                    console.warn('Failed to load settings:', e);
+                }
+            }
+        }
+        
+        // Color schemes for contours based on elevation
+        const colorSchemes = {
+            terrain: (z, zMin, zMax) => {
+                const t = (z - zMin) / (zMax - zMin);
+                // Green -> Yellow -> Brown -> White
+                if (t < 0.25) return `hsl(120, 40%, ${30 + t * 80}%)`;
+                if (t < 0.5) return `hsl(${120 - (t - 0.25) * 240}, 50%, 50%)`;
+                if (t < 0.75) return `hsl(30, ${60 - (t - 0.5) * 120}%, ${40 + (t - 0.5) * 40}%)`;
+                return `hsl(30, 20%, ${60 + (t - 0.75) * 100}%)`;
+            },
+            viridis: (z, zMin, zMax) => {
+                const t = (z - zMin) / (zMax - zMin);
+                return `hsl(${280 - t * 200}, ${50 + t * 30}%, ${30 + t * 40}%)`;
+            },
+            mono: (z, zMin, zMax) => {
+                const t = (z - zMin) / (zMax - zMin);
+                return `hsl(0, 0%, ${20 + t * 60}%)`;
+            },
+            topo: (z, zMin, zMax) => {
+                const t = (z - zMin) / (zMax - zMin);
+                // Classic topo colors
+                if (t < 0.2) return '#2d5a27';
+                if (t < 0.4) return '#6b8e23';
+                if (t < 0.6) return '#d4a574';
+                if (t < 0.8) return '#a0522d';
+                return '#8b4513';
+            }
+        };
+        
+        // Initialize map with CRS.Simple for non-geographic data
+        const map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -5,
+            maxZoom: 10,
+        });
+        
+        // Layers
+        let contourLayer = null;
+        let pointsLayer = null;
+        let labelsLayer = null;
+        
+        // Cached data
+        let bounds = null;
+        let zMin = {{ z_min }};
+        let zMax = {{ z_max }};
+        
+        // Status updates
+        function setStatus(message, type = 'loading') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+        
+        // Fetch bounds and initialize view
+        async function initializeMap() {
+            try {
+                setStatus('Loading bounds...', 'loading');
+                const response = await fetch('/api/bounds');
+                bounds = await response.json();
+                
+                // Set map bounds (Leaflet Simple CRS uses [y, x] for LatLng)
+                const corner1 = L.latLng(bounds.y_min, bounds.x_min);
+                const corner2 = L.latLng(bounds.y_max, bounds.x_max);
+                const mapBounds = L.latLngBounds(corner1, corner2);
+                
+                map.fitBounds(mapBounds, { padding: [50, 50] });
+                
+                zMin = bounds.z_min;
+                zMax = bounds.z_max;
+                
+                // Load initial contours
+                await updateContours();
+                
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+        
+        // Update contours based on current settings
+        async function updateContours() {
+            const minorInterval = parseFloat(document.getElementById('minor-interval').value);
+            const majorInterval = parseFloat(document.getElementById('major-interval').value);
+            const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            const colorScheme = document.getElementById('color-scheme').value;
+            const showLabels = document.getElementById('show-labels').checked;
+            
+            setStatus('Generating contours...', 'loading');
+            
+            try {
+                // Build query params
+                const params = new URLSearchParams();
+                if (minorInterval > 0) params.append('minor_interval', minorInterval);
+                if (majorInterval > 0) params.append('major_interval', majorInterval);
+                if (maxDistance > 0) params.append('max_distance', maxDistance);
+                
+                const response = await fetch(`/api/contours?${params}`);
+                const data = await response.json();
+                
+                // Remove old layers
+                if (contourLayer) map.removeLayer(contourLayer);
+                if (labelsLayer) map.removeLayer(labelsLayer);
+                
+                // Create new contour layer
+                contourLayer = L.geoJSON(data, {
+                    style: (feature) => {
+                        const z = feature.properties.elevation;
+                        const isMajor = feature.properties.is_major;
+                        const colorFn = colorSchemes[colorScheme] || colorSchemes.terrain;
+                        
+                        return {
+                            color: colorFn(z, zMin, zMax),
+                            weight: isMajor ? 2 : 0.8,
+                            opacity: isMajor ? 1 : 0.7,
+                        };
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const z = feature.properties.elevation.toFixed(2);
+                        layer.bindTooltip(`Elevation: ${z}m`, {
+                            className: 'elevation-tooltip',
+                            sticky: true
+                        });
+                    }
+                }).addTo(map);
+                
+                // Add labels for major contours
+                if (showLabels) {
+                    labelsLayer = L.layerGroup();
+                    const majorFeatures = data.features.filter(f => f.properties.is_major);
+                    
+                    // Sample labels along contours
+                    majorFeatures.forEach(feature => {
+                        const coords = feature.geometry.coordinates;
+                        if (coords.length > 5) {
+                            // Place label near middle of contour
+                            const midIdx = Math.floor(coords.length / 2);
+                            const [x, y] = coords[midIdx];
+                            const z = feature.properties.elevation.toFixed(1);
+                            
+                            const marker = L.marker([y, x], {
+                                icon: L.divIcon({
+                                    className: 'contour-label',
+                                    html: `<span style="background:rgba(255,255,255,0.9);color:#333;padding:1px 3px;font-size:10px;border-radius:2px;border:1px solid #ccc;">${z}</span>`,
+                                    iconSize: [40, 15],
+                                    iconAnchor: [20, 7]
+                                })
+                            });
+                            labelsLayer.addLayer(marker);
+                        }
+                    });
+                    labelsLayer.addTo(map);
+                }
+                
+                // Update stats
+                document.getElementById('stat-levels').textContent = data.meta.num_levels;
+                document.getElementById('stat-segments').textContent = data.meta.num_segments;
+                
+                setStatus(`Loaded ${data.meta.num_segments} segments`, 'success');
+                
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+        
+        // Toggle data points visibility
+        async function togglePoints() {
+            const showPoints = document.getElementById('show-points').checked;
+            
+            if (showPoints && !pointsLayer) {
+                setStatus('Loading points...', 'loading');
+                try {
+                    const response = await fetch('/api/points');
+                    const data = await response.json();
+                    
+                    pointsLayer = L.geoJSON(data, {
+                        pointToLayer: (feature, latlng) => {
+                            const z = feature.properties.elevation;
+                            const colorFn = colorSchemes[document.getElementById('color-scheme').value];
+                            return L.circleMarker(latlng, {
+                                radius: 3,
+                                fillColor: colorFn(z, zMin, zMax),
+                                color: '#333',
+                                weight: 0.5,
+                                fillOpacity: 0.8
+                            });
+                        },
+                        onEachFeature: (feature, layer) => {
+                            const [x, y] = feature.geometry.coordinates;
+                            const z = feature.properties.elevation.toFixed(3);
+                            layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m`, {
+                                className: 'elevation-tooltip'
+                            });
+                        }
+                    });
+                    setStatus('Points loaded', 'success');
+                } catch (error) {
+                    setStatus(`Error loading points: ${error.message}`, 'error');
+                    return;
+                }
+            }
+            
+            if (pointsLayer) {
+                if (showPoints) {
+                    pointsLayer.addTo(map);
+                } else {
+                    map.removeLayer(pointsLayer);
+                }
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('update-btn').addEventListener('click', () => {
+            saveSettings();
+            updateContours();
+        });
+        document.getElementById('show-points').addEventListener('change', () => {
+            saveSettings();
+            togglePoints();
+        });
+        document.getElementById('show-labels').addEventListener('change', () => {
+            saveSettings();
+            updateContours();
+        });
+        document.getElementById('color-scheme').addEventListener('change', () => {
+            saveSettings();
+            updateContours();
+        });
+        
+        // Save settings on input change (for number fields)
+        document.getElementById('minor-interval').addEventListener('change', saveSettings);
+        document.getElementById('major-interval').addEventListener('change', saveSettings);
+        document.getElementById('max-distance').addEventListener('change', saveSettings);
+        
+        // Initialize: load settings then initialize map
+        loadSettings();
+        initializeMap();
+        
+        // Apply show-points if it was saved as checked
+        if (document.getElementById('show-points').checked) {
+            togglePoints();
+        }
+    </script>
+</body>
+</html>
