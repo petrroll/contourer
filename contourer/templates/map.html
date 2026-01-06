@@ -595,9 +595,9 @@
                 <div class="controls-3d-info" id="controls-3d-info">
                     <strong data-i18n="controls3D">3D Controls:</strong>
                     <ul>
-                        <li data-i18n="controlRotate">Left-click + drag: Rotate</li>
-                        <li data-i18n="controlZoom">Scroll: Zoom</li>
-                        <li data-i18n="controlPan">Right-click + drag: Pan</li>
+                        <li data-i18n="controlPan">Left-click + drag: Pan</li>
+                        <li data-i18n="controlRotate">Right-click + drag: Orbit</li>
+                        <li data-i18n="controlZoom">Scroll / pinch: Zoom</li>
                     </ul>
                 </div>
             </div>
@@ -737,9 +737,9 @@
                 showWireframe: 'Show Wireframe',
                 zScale: 'Z Scale (exaggeration)',
                 controls3D: '3D Controls:',
-                controlRotate: 'Left-click + drag: Rotate',
-                controlZoom: 'Scroll: Zoom',
-                controlPan: 'Right-click + drag: Pan',
+                controlPan: 'Left-click + drag: Pan',
+                controlRotate: 'Right-click + drag: Orbit',
+                controlZoom: 'Scroll / pinch: Zoom',
                 loading3D: 'Loading 3D mesh...',
                 loaded3D: '3D mesh loaded'
             },
@@ -791,9 +791,9 @@
                 showWireframe: 'Zobrazit drátový model',
                 zScale: 'Měřítko Z (přehánění)',
                 controls3D: 'Ovládání 3D:',
-                controlRotate: 'Levé tlačítko + tažení: Otáčení',
-                controlZoom: 'Kolečko: Přiblížení',
-                controlPan: 'Pravé tlačítko + tažení: Posun',
+                controlPan: 'Levé tlačítko + tažení: Posun',
+                controlRotate: 'Pravé tlačítko + tažení: Otáčení',
+                controlZoom: 'Kolečko / gesto: Přiblížení',
                 loading3D: 'Načítání 3D modelu...',
                 loaded3D: '3D model načten'
             }
@@ -1264,7 +1264,7 @@
             camera.position.set(0, -100, 100);
             camera.up.set(0, 0, 1);
             
-            // Create controls
+            // Create controls - AutoCAD-style navigation
             controls = new THREE.OrbitControls(camera, canvas);
             controls.enableDamping = true;
             controls.dampingFactor = 0.1;
@@ -1278,6 +1278,21 @@
             controls.minDistance = 10;
             controls.maxDistance = 1000;
             
+            // CAD-style controls (laptop-friendly):
+            // - Left-click + drag: Pan
+            // - Right-click + drag: Orbit/Rotate
+            // - Scroll wheel / pinch: Zoom
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.PAN,
+                MIDDLE: THREE.MOUSE.PAN,
+                RIGHT: THREE.MOUSE.ROTATE
+            };
+            
+            // Prevent context menu on right-click
+            canvas.addEventListener('contextmenu', function(event) {
+                event.preventDefault();
+            });
+
             // Add lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
             scene.add(ambientLight);

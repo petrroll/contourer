@@ -69,6 +69,22 @@ uv run contourer data/zakazka-body.txt --web
 - 🎨 **Color Schemes** - Switch between Terrain, Viridis, Monochrome, Topographic
 - 🏷️ **Elevation Labels** - Toggle labels on major contours
 - 💡 **Hover Tooltips** - See exact elevation on hover
+- 🧊 **3D View** - Interactive 3D terrain visualization with AutoCAD-style controls
+
+### 3D View
+
+Switch to the 3D view by clicking the **3D View** tab in the sidebar. The 3D view displays the terrain as a mesh with contour lines overlaid.
+
+**3D Navigation Controls:**
+
+| Control | Action |
+|---------|--------|
+| Left-click + drag | Pan the view |
+| Right-click + drag | Orbit/rotate around the terrain |
+| Scroll wheel / pinch | Zoom in/out |
+
+**3D-specific settings:**
+- **Z Scale** - Adjust vertical exaggeration to emphasize terrain relief
 
 ## Input Format
 
