@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import matplotlib.tri as mtri
 import numpy as np
 from scipy.spatial import Delaunay
@@ -238,45 +239,42 @@ def create_visualization(
         major_levels: Optional list of major levels to draw with thicker lines
         show_points: Whether to show original data points on the map
     """
-    # Center coordinates around origin for display
-    x_centered = triangulation.x - np.mean(triangulation.x)
-    y_centered = triangulation.y - np.mean(triangulation.y)
-    
-    # Create new triangulation with centered coordinates
-    centered_tri = mtri.Triangulation(x_centered, y_centered, triangulation.triangles)
-    centered_tri.set_mask(triangulation.mask)
-    
     fig, ax = plt.subplots(figsize=(12, 10))
     
-    # Plot filled contours
-    contourf = ax.tricontourf(centered_tri, z_values, levels=levels, cmap='terrain', alpha=0.7)
+    # Plot filled contours using original coordinates
+    contourf = ax.tricontourf(triangulation, z_values, levels=levels, cmap='terrain', alpha=0.7)
     
     # Plot contour lines with major/minor differentiation
     if major_levels is not None and len(major_levels) > 0:
         # Minor contour lines (all levels, thin)
         minor_only = [l for l in levels if l not in major_levels]
         if minor_only:
-            ax.tricontour(centered_tri, z_values, levels=minor_only, colors='black', linewidths=0.3, alpha=0.6)
+            ax.tricontour(triangulation, z_values, levels=minor_only, colors='black', linewidths=0.3, alpha=0.6)
         
         # Major contour lines (thicker, more prominent)
-        cs_major = ax.tricontour(centered_tri, z_values, levels=major_levels, colors='black', linewidths=1.2)
+        cs_major = ax.tricontour(triangulation, z_values, levels=major_levels, colors='black', linewidths=1.2)
         
         # Add labels to major contour lines
         ax.clabel(cs_major, inline=True, fontsize=8, fmt='%.1f')
     else:
         # No major/minor distinction - draw all lines the same
-        ax.tricontour(centered_tri, z_values, levels=levels, colors='black', linewidths=0.5)
+        ax.tricontour(triangulation, z_values, levels=levels, colors='black', linewidths=0.5)
     
     # Plot original point coordinates if requested
     if show_points:
-        ax.scatter(x_centered, y_centered, c=z_values, cmap='terrain', 
+        ax.scatter(triangulation.x, triangulation.y, c=z_values, cmap='terrain', 
                    s=10, edgecolors='black', linewidths=0.3, alpha=0.8, zorder=5)
     
     # Add colorbar
     cbar = plt.colorbar(contourf, ax=ax, label='Elevation (Z)')
     
-    ax.set_xlabel('X (centered)')
-    ax.set_ylabel('Y (centered)')
+    # Use full coordinate values without scientific notation offset
+    ax.xaxis.set_major_formatter(mticker.ScalarFormatter(useOffset=False))
+    ax.yaxis.set_major_formatter(mticker.ScalarFormatter(useOffset=False))
+    ax.ticklabel_format(style='plain', axis='both')
+    
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
     ax.set_title('Terrain Contour Map')
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
