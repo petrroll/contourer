@@ -117,6 +117,71 @@ def generate_auto_levels(z_stats: dict, num_levels: int = 50) -> list[float]:
     return levels.tolist()
 
 
+def align_to_interval(value: float, interval: float, mode: str = 'floor') -> float:
+    """Align a value to the nearest interval boundary.
+    
+    Args:
+        value: The value to align
+        interval: The interval to align to
+        mode: 'floor' for rounding down, 'ceil' for rounding up
+    
+    Returns:
+        Aligned value
+    """
+    if mode == 'floor':
+        return np.floor(value / interval) * interval
+    else:
+        return np.ceil(value / interval) * interval
+
+
+def generate_interval_levels(
+    z_stats: dict, 
+    minor_interval: float,
+    major_interval: Optional[float] = None
+) -> tuple[list[float], list[float]]:
+    """Generate contour levels based on interval granularity.
+    
+    Args:
+        z_stats: Dictionary with 'min' and 'max' Z values
+        minor_interval: Interval for minor contour lines (e.g., 0.2)
+        major_interval: Interval for major contour lines (e.g., 1.0)
+                       If None, defaults to 5× minor_interval
+    
+    Returns:
+        Tuple of (all_levels, major_levels)
+        - all_levels: All contour levels (minor + major)
+        - major_levels: Only the major contour levels (for visualization)
+    """
+    if major_interval is None:
+        major_interval = minor_interval * 5
+    
+    # Align start to minor interval (round down)
+    z_min = z_stats['min']
+    z_max = z_stats['max']
+    
+    start = align_to_interval(z_min, minor_interval, 'floor')
+    end = align_to_interval(z_max, minor_interval, 'ceil')
+    
+    print(f"Level generation: z_min={z_min:.3f} -> aligned start={start:.3f}")
+    print(f"                  z_max={z_max:.3f} -> aligned end={end:.3f}")
+    
+    # Generate all levels at minor interval
+    # Use round to avoid floating point precision issues
+    num_steps = int(round((end - start) / minor_interval)) + 1
+    all_levels = [round(start + i * minor_interval, 10) for i in range(num_steps)]
+    
+    # Identify major levels (those that align with major_interval)
+    major_levels = [
+        level for level in all_levels 
+        if abs(level % major_interval) < 1e-9 or abs(level % major_interval - major_interval) < 1e-9
+    ]
+    
+    print(f"Generated {len(all_levels)} levels (minor interval: {minor_interval})")
+    print(f"Major levels ({len(major_levels)}, interval: {major_interval}): {[f'{l:.2f}' for l in major_levels[:10]]}{'...' if len(major_levels) > 10 else ''}")
+    
+    return all_levels, major_levels
+
+
 def extract_contour_paths(
     triangulation: mtri.Triangulation,
     z_values: np.ndarray,
@@ -159,9 +224,18 @@ def create_visualization(
     triangulation: mtri.Triangulation,
     z_values: np.ndarray,
     levels: list[float],
-    output_path: Path
+    output_path: Path,
+    major_levels: Optional[list[float]] = None
 ) -> None:
-    """Create top-down contour map visualization."""
+    """Create top-down contour map visualization.
+    
+    Args:
+        triangulation: The triangulation mesh
+        z_values: Z values for each point
+        levels: All contour levels to draw
+        output_path: Path to save the image
+        major_levels: Optional list of major levels to draw with thicker lines
+    """
     # Center coordinates around origin for display
     x_centered = triangulation.x - np.mean(triangulation.x)
     y_centered = triangulation.y - np.mean(triangulation.y)
@@ -175,8 +249,21 @@ def create_visualization(
     # Plot filled contours
     contourf = ax.tricontourf(centered_tri, z_values, levels=levels, cmap='terrain', alpha=0.7)
     
-    # Plot contour lines
-    ax.tricontour(centered_tri, z_values, levels=levels, colors='black', linewidths=0.5)
+    # Plot contour lines with major/minor differentiation
+    if major_levels is not None and len(major_levels) > 0:
+        # Minor contour lines (all levels, thin)
+        minor_only = [l for l in levels if l not in major_levels]
+        if minor_only:
+            ax.tricontour(centered_tri, z_values, levels=minor_only, colors='black', linewidths=0.3, alpha=0.6)
+        
+        # Major contour lines (thicker, more prominent)
+        cs_major = ax.tricontour(centered_tri, z_values, levels=major_levels, colors='black', linewidths=1.2)
+        
+        # Add labels to major contour lines
+        ax.clabel(cs_major, inline=True, fontsize=8, fmt='%.1f')
+    else:
+        # No major/minor distinction - draw all lines the same
+        ax.tricontour(centered_tri, z_values, levels=levels, colors='black', linewidths=0.5)
     
     # Add colorbar
     cbar = plt.colorbar(contourf, ax=ax, label='Elevation (Z)')
@@ -261,6 +348,16 @@ def main():
         help="Z values for contour levels (auto-generated if omitted)"
     )
     parser.add_argument(
+        "--minor-interval",
+        type=float,
+        help="Interval for minor contour lines (e.g., 0.2). Overrides --levels."
+    )
+    parser.add_argument(
+        "--major-interval",
+        type=float,
+        help="Interval for major contour lines (e.g., 1.0). Only affects visualization. Defaults to 5× minor-interval."
+    )
+    parser.add_argument(
         "--max-distance",
         type=float,
         default=None,
@@ -305,7 +402,17 @@ def main():
     triangulation, mask = create_triangulation_with_filter(points, args.max_distance)
     
     # Determine contour levels
-    if args.levels:
+    major_levels = None  # Track major levels for visualization
+    
+    if args.minor_interval:
+        # Use interval-based level generation
+        print(f"\nUsing interval-based levels (minor: {args.minor_interval}, major: {args.major_interval or 'auto'})")
+        levels, major_levels = generate_interval_levels(
+            z_stats, 
+            args.minor_interval, 
+            args.major_interval
+        )
+    elif args.levels:
         levels = args.levels
         print(f"\nUsing custom levels: {levels}")
     else:
@@ -332,7 +439,7 @@ def main():
     if args.plot:
         print("\nCreating visualization...")
         args.plot.parent.mkdir(parents=True, exist_ok=True)
-        create_visualization(triangulation, points[:, 2], levels, args.plot)
+        create_visualization(triangulation, points[:, 2], levels, args.plot, major_levels)
     
     print("\nDone!")
     return 0
