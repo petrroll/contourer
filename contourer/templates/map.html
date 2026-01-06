@@ -410,6 +410,77 @@
         .setting-3d.visible {
             display: block;
         }
+        
+        /* AutoCAD-style crosshair cursor */
+        #map.crosshair-cursor {
+            cursor: crosshair;
+        }
+        
+        #canvas-3d.crosshair-cursor {
+            cursor: crosshair;
+        }
+        
+        /* Custom crosshair overlay for more visible cross */
+        .crosshair-overlay {
+            position: absolute;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .crosshair-overlay.visible {
+            display: block;
+        }
+        
+        .crosshair-h, .crosshair-v {
+            position: absolute;
+            background: #ff0000;
+        }
+        
+        .crosshair-h {
+            width: 21px;
+            height: 1px;
+            transform: translateX(-10px);
+        }
+        
+        .crosshair-v {
+            width: 1px;
+            height: 21px;
+            transform: translateY(-10px);
+        }
+        
+        /* Coordinate display panel */
+        .coord-display {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #00ff00;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 1000;
+            min-width: 200px;
+            border: 1px solid #333;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        
+        .coord-display .coord-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 2px 0;
+        }
+        
+        .coord-display .coord-label {
+            color: #888;
+            margin-right: 15px;
+        }
+        
+        .coord-display .coord-value {
+            color: #00ff00;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -581,8 +652,30 @@
         </div>
         
         <div id="map-container">
-            <div id="map"></div>
-            <canvas id="canvas-3d"></canvas>
+            <div id="map" class="crosshair-cursor"></div>
+            <canvas id="canvas-3d" class="crosshair-cursor"></canvas>
+            
+            <!-- AutoCAD-style crosshair overlay -->
+            <div class="crosshair-overlay" id="crosshair-overlay">
+                <div class="crosshair-h"></div>
+                <div class="crosshair-v"></div>
+            </div>
+            
+            <!-- Coordinate display -->
+            <div class="coord-display" id="coord-display">
+                <div class="coord-row">
+                    <span class="coord-label">X:</span>
+                    <span class="coord-value" id="coord-x">0.000</span>
+                </div>
+                <div class="coord-row">
+                    <span class="coord-label">Y:</span>
+                    <span class="coord-value" id="coord-y">0.000</span>
+                </div>
+                <div class="coord-row">
+                    <span class="coord-label">Z:</span>
+                    <span class="coord-value" id="coord-z">-</span>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -1288,6 +1381,13 @@
             const zCenter = (z_min + z_max) / 2;
             const scale = Math.max(xMax - xMin, yMax - yMin);
             
+            // Store transformation info for coordinate display
+            meshTransform = {
+                xCenter, yCenter, zCenter,
+                scale, zScale,
+                xMin, xMax, yMin, yMax, zMin: z_min, zMax: z_max
+            };
+            
             // Create geometry
             const geometry = new THREE.BufferGeometry();
             
@@ -1533,6 +1633,126 @@
                 console.error('Error loading contours for 3D:', error);
             }
         }
+        
+        // ==================== Crosshair & Coordinate Display ====================
+        const crosshairOverlay = document.getElementById('crosshair-overlay');
+        const coordDisplay = document.getElementById('coord-display');
+        const coordX = document.getElementById('coord-x');
+        const coordY = document.getElementById('coord-y');
+        const coordZ = document.getElementById('coord-z');
+        
+        // Store mesh transformation info for 3D coordinate calculations
+        let meshTransform = {
+            xCenter: 0, yCenter: 0, zCenter: 0,
+            scale: 1, zScale: 1,
+            xMin: 0, xMax: 0, yMin: 0, yMax: 0, zMin: 0, zMax: 0
+        };
+        
+        function updateCrosshairPosition(clientX, clientY) {
+            const container = document.getElementById('map-container');
+            const rect = container.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+            
+            // Update crosshair position
+            crosshairOverlay.style.left = x + 'px';
+            crosshairOverlay.style.top = y + 'px';
+        }
+        
+        function update2DCoordinates(e) {
+            const container = document.getElementById('map-container');
+            const rect = container.getBoundingClientRect();
+            
+            // Get map container-relative position
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Convert to map coordinates using Leaflet
+            const point = L.point(x, y);
+            const latlng = map.containerPointToLatLng(point);
+            
+            // In CRS.Simple, lat = y, lng = x
+            coordX.textContent = latlng.lng.toFixed(3);
+            coordY.textContent = latlng.lat.toFixed(3);
+            coordZ.textContent = '-'; // No Z for 2D cursor position
+            
+            updateCrosshairPosition(e.clientX, e.clientY);
+        }
+        
+        function update3DCoordinates(e) {
+            if (!renderer || !camera || !meshObject) {
+                coordX.textContent = '-';
+                coordY.textContent = '-';
+                coordZ.textContent = '-';
+                return;
+            }
+            
+            const container = document.getElementById('map-container');
+            const rect = container.getBoundingClientRect();
+            
+            // Calculate normalized device coordinates
+            const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            // Raycast to find intersection with mesh
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+            
+            const intersects = raycaster.intersectObject(meshObject);
+            
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                
+                // Convert back from normalized 3D coordinates to real-world coordinates
+                const zScale = parseFloat(document.getElementById('z-scale').value) || 1;
+                
+                const realX = (point.x / 100) * meshTransform.scale + meshTransform.xCenter;
+                const realY = (point.y / 100) * meshTransform.scale + meshTransform.yCenter;
+                const realZ = ((point.z / 100) * meshTransform.scale / zScale) + meshTransform.zCenter;
+                
+                coordX.textContent = realX.toFixed(3);
+                coordY.textContent = realY.toFixed(3);
+                coordZ.textContent = realZ.toFixed(3);
+            } else {
+                coordX.textContent = '-';
+                coordY.textContent = '-';
+                coordZ.textContent = '-';
+            }
+            
+            updateCrosshairPosition(e.clientX, e.clientY);
+        }
+        
+        function showCrosshair() {
+            crosshairOverlay.classList.add('visible');
+        }
+        
+        function hideCrosshair() {
+            crosshairOverlay.classList.remove('visible');
+        }
+        
+        // 2D map mouse events
+        document.getElementById('map').addEventListener('mousemove', (e) => {
+            if (currentView === '2d') {
+                update2DCoordinates(e);
+                showCrosshair();
+            }
+        });
+        
+        document.getElementById('map').addEventListener('mouseleave', () => {
+            hideCrosshair();
+        });
+        
+        // 3D canvas mouse events
+        document.getElementById('canvas-3d').addEventListener('mousemove', (e) => {
+            if (currentView === '3d') {
+                update3DCoordinates(e);
+                showCrosshair();
+            }
+        });
+        
+        document.getElementById('canvas-3d').addEventListener('mouseleave', () => {
+            hideCrosshair();
+        });
         
         function switchView(view) {
             currentView = view;
