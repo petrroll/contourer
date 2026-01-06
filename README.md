@@ -60,6 +60,8 @@ Launch a browser-based interactive map with `--web`:
 uv run contourer data/zakazka-body.txt --web
 ```
 
+<img src="docs/webapp-screenshot.png" alt="Web Viewer Screenshot" width="600">
+
 **Features:**
 - 🔍 **Zoom & Pan** - Contour lines maintain constant width at any zoom level
 - ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
