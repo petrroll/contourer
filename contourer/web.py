@@ -20,13 +20,27 @@ from .main import (
 )
 
 
-def create_app(file_path: Path) -> Flask:
-    """Create Flask app with the given data file."""
+def create_app(
+    file_path: Path,
+    initial_minor_interval: Optional[float] = None,
+    initial_major_interval: Optional[float] = None,
+    initial_max_distance: Optional[float] = None,
+    initial_show_points: bool = False,
+) -> Flask:
+    """Create Flask app with the given data file and optional initial settings."""
     app = Flask(__name__, template_folder='templates', static_folder='static')
     
     # Store file path and cached data
     app.config['FILE_PATH'] = file_path
     app.config['CACHE'] = {}
+    
+    # Store initial settings from CLI
+    app.config['INITIAL_SETTINGS'] = {
+        'minor_interval': initial_minor_interval,
+        'major_interval': initial_major_interval,
+        'max_distance': initial_max_distance,
+        'show_points': initial_show_points,
+    }
     
     def get_cached_data():
         """Load and cache point cloud data."""
@@ -59,10 +73,15 @@ def create_app(file_path: Path) -> Flask:
     def index():
         """Render the main map view."""
         points, z_stats = get_cached_data()
+        initial = app.config['INITIAL_SETTINGS']
         return render_template('map.html', 
                                filename=file_path.name,
                                z_min=z_stats['min'],
                                z_max=z_stats['max'],
+                               initial_minor_interval=initial['minor_interval'],
+                               initial_major_interval=initial['major_interval'],
+                               initial_max_distance=initial['max_distance'],
+                               initial_show_points=initial['show_points'],
                                num_points=len(points))
     
     @app.route('/api/bounds')
@@ -221,9 +240,23 @@ def create_app(file_path: Path) -> Flask:
     return app
 
 
-def run_web_server(file_path: Path, host: str = '127.0.0.1', port: int = 5000):
+def run_web_server(
+    file_path: Path,
+    host: str = '127.0.0.1',
+    port: int = 5000,
+    minor_interval: Optional[float] = None,
+    major_interval: Optional[float] = None,
+    max_distance: Optional[float] = None,
+    show_points: bool = False,
+):
     """Start the web server for interactive viewing."""
-    app = create_app(file_path)
+    app = create_app(
+        file_path,
+        initial_minor_interval=minor_interval,
+        initial_major_interval=major_interval,
+        initial_max_distance=max_distance,
+        initial_show_points=show_points,
+    )
     
     print(f"\n🗺️  Contour Viewer starting...")
     print(f"📂 Data file: {file_path}")

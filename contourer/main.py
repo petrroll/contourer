@@ -400,7 +400,14 @@ def main():
     # Launch web viewer if requested
     if args.web:
         from .web import run_web_server
-        run_web_server(args.file_path, port=args.port)
+        run_web_server(
+            args.file_path,
+            port=args.port,
+            minor_interval=args.minor_interval,
+            major_interval=args.major_interval,
+            max_distance=args.max_distance,
+            show_points=args.show_points,
+        )
         return 0
     
     # Derive output paths from input filename
