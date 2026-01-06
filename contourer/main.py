@@ -275,7 +275,7 @@ def create_visualization(
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, format='pdf', bbox_inches='tight')
     plt.close()
     
     print(f"\nVisualization saved to: {output_path}")
@@ -378,7 +378,7 @@ def main():
     parser.add_argument(
         "--plot",
         type=Path,
-        help="Save visualization to image file (e.g., map.png)"
+        help="Save visualization to PDF file (e.g., map.pdf)"
     )
     
     args = parser.parse_args()
