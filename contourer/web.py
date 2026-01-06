@@ -14,6 +14,8 @@ from .main import (
     extract_contour_paths,
     generate_auto_levels,
     generate_interval_levels,
+    export_contours_txt,
+    create_visualization,
 )
 
 
@@ -154,6 +156,61 @@ def create_app(file_path: Path) -> Flask:
                 "num_segments": len(features),
                 "levels": levels[:20] if len(levels) > 20 else levels,
                 "major_levels": major_levels[:10] if len(major_levels) > 10 else major_levels,
+            }
+        })
+    
+    @app.route('/api/export')
+    def export_files():
+        """Export contour lines and map to ./data/out folder, just like CLI."""
+        points, z_stats = get_cached_data()
+        
+        # Get parameters from request
+        minor_interval = request.args.get('minor_interval', type=float)
+        major_interval = request.args.get('major_interval', type=float)
+        max_distance = request.args.get('max_distance', type=float)
+        num_levels = request.args.get('num_levels', default=30, type=int)
+        show_points = request.args.get('show_points', default='false').lower() == 'true'
+        
+        # Get triangulation
+        triangulation = get_triangulation(max_distance)
+        
+        # Generate levels
+        major_levels = None
+        if minor_interval:
+            levels, major_levels = generate_interval_levels(
+                z_stats, minor_interval, major_interval
+            )
+        else:
+            levels = generate_auto_levels(z_stats, num_levels)
+        
+        # Extract contours
+        contours = extract_contour_paths(triangulation, points[:, 2], levels)
+        
+        # Derive output paths from input filename (same as CLI)
+        input_stem = file_path.stem
+        output_dir = Path("./data/out")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        contour_output_path = output_dir / f"{input_stem}_contour.txt"
+        map_output_path = output_dir / f"{input_stem}_map.pdf"
+        
+        # Export contour txt using existing function
+        export_contours_txt(contours, contour_output_path)
+        
+        # Create visualization PDF using existing function
+        create_visualization(
+            triangulation, 
+            points[:, 2], 
+            levels, 
+            map_output_path, 
+            major_levels, 
+            show_points
+        )
+        
+        return jsonify({
+            "success": True,
+            "files": {
+                "txt": str(contour_output_path),
+                "pdf": str(map_output_path)
             }
         })
     

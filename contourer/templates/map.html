@@ -272,6 +272,59 @@
         .copy-btn.copied svg {
             fill: #fff;
         }
+        
+        /* Export button */
+        .export-btn {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .export-btn:hover {
+            background: #42a5f5;
+        }
+        
+        .export-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .export-icon {
+            width: 18px;
+            height: 18px;
+            fill: white;
+        }
+        
+        .export-result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            word-break: break-all;
+        }
+        
+        .export-result.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .export-result.error {
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
     </style>
 </head>
 <body>
@@ -398,6 +451,17 @@
                     </button>
                 </div>
             </div>
+            
+            <div class="section">
+                <h2 data-i18n="exportData">Export Data</h2>
+                <button id="export-btn" class="export-btn">
+                    <svg viewBox="0 0 24 24" class="export-icon">
+                        <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
+                    </svg>
+                    <span data-i18n="exportFiles">Export to ./data/out</span>
+                </button>
+                <div id="export-result" class="export-result" style="display: none;"></div>
+            </div>
         </div>
         
         <div id="map"></div>
@@ -445,7 +509,12 @@
                 errorLoadingPoints: 'Error loading points: {message}',
                 elevation: 'Elevation: {z}m',
                 commandLine: 'Command Line',
-                copied: 'Copied!'
+                copied: 'Copied!',
+                exportData: 'Export Data',
+                exportFiles: 'Export to ./data/out',
+                exporting: 'Exporting...',
+                exportSuccess: 'Exported: {txt} and {pdf}',
+                exportError: 'Export failed: {message}'
             },
             cs: {
                 title: 'Prohlížeč vrstevnic',
@@ -483,7 +552,12 @@
                 errorLoadingPoints: 'Chyba při načítání bodů: {message}',
                 elevation: 'Výška: {z} m',
                 commandLine: 'Příkazový řádek',
-                copied: 'Zkopírováno!'
+                copied: 'Zkopírováno!',
+                exportData: 'Export dat',
+                exportFiles: 'Exportovat do ./data/out',
+                exporting: 'Exportování...',
+                exportSuccess: 'Exportováno: {txt} a {pdf}',
+                exportError: 'Export selhal: {message}'
             }
         };
         
@@ -833,6 +907,59 @@
             }
         }
         
+        // Build export URL with current settings
+        function buildExportUrl() {
+            const minorInterval = parseFloat(document.getElementById('minor-interval').value);
+            const majorInterval = parseFloat(document.getElementById('major-interval').value);
+            const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            const showPoints = document.getElementById('show-points').checked;
+            
+            const params = new URLSearchParams();
+            if (minorInterval > 0) params.set('minor_interval', minorInterval);
+            if (majorInterval > 0) params.set('major_interval', majorInterval);
+            if (maxDistance > 0) params.set('max_distance', maxDistance);
+            params.set('show_points', showPoints);
+            
+            return `/api/export?${params.toString()}`;
+        }
+        
+        // Export data to ./data/out folder
+        async function exportFiles() {
+            const btn = document.getElementById('export-btn');
+            const resultDiv = document.getElementById('export-result');
+            const originalText = btn.querySelector('span').textContent;
+            
+            btn.disabled = true;
+            btn.querySelector('span').textContent = t('exporting');
+            resultDiv.style.display = 'none';
+            
+            try {
+                const url = buildExportUrl();
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || response.statusText);
+                }
+                
+                // Show success message with file paths
+                resultDiv.textContent = t('exportSuccess', { 
+                    txt: data.files.txt, 
+                    pdf: data.files.pdf 
+                });
+                resultDiv.className = 'export-result success';
+                resultDiv.style.display = 'block';
+                
+            } catch (error) {
+                resultDiv.textContent = t('exportError', { message: error.message });
+                resultDiv.className = 'export-result error';
+                resultDiv.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.querySelector('span').textContent = originalText;
+            }
+        }
+        
         // Event listeners
         document.getElementById('update-btn').addEventListener('click', () => {
             saveSettings();
@@ -855,6 +982,7 @@
             setLanguage(e.target.value);
         });
         document.getElementById('copy-btn').addEventListener('click', copyCommand);
+        document.getElementById('export-btn').addEventListener('click', exportFiles);
         
         // Save settings on input change (for number fields) and update command line
         document.getElementById('minor-interval').addEventListener('change', () => {
