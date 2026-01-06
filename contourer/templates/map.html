@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contour Viewer - {{ filename }}</title>
+    <title data-i18n="title">Contour Viewer</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -222,98 +222,108 @@
 <body>
     <div id="container">
         <div id="sidebar">
-            <h1>🗺️ Contour Viewer</h1>
+            <h1>🗺️ <span data-i18n="appTitle">Contour Viewer</span></h1>
             <p class="subtitle">{{ filename }}</p>
             
             <div class="section">
-                <h2>Data Info</h2>
+                <div class="control-group">
+                    <label for="language-select" data-i18n="language">Language</label>
+                    <select id="language-select">
+                        <option value="en">English</option>
+                        <option value="cs">Čeština</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2 data-i18n="dataInfo">Data Info</h2>
                 <div class="stats">
                     <div class="stats-row">
-                        <span class="stats-label">Points</span>
+                        <span class="stats-label" data-i18n="points">Points</span>
                         <span class="stats-value">{{ num_points }}</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stats-label">Z Min</span>
+                        <span class="stats-label" data-i18n="zMin">Z Min</span>
                         <span class="stats-value">{{ "%.2f"|format(z_min) }}</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stats-label">Z Max</span>
+                        <span class="stats-label" data-i18n="zMax">Z Max</span>
                         <span class="stats-value">{{ "%.2f"|format(z_max) }}</span>
                     </div>
                 </div>
             </div>
             
             <div class="section">
-                <h2>Contour Settings</h2>
+                <h2 data-i18n="contourSettings">Contour Settings</h2>
                 
                 <div class="control-group">
-                    <label for="minor-interval">Minor Interval (m)</label>
+                    <label for="minor-interval" data-i18n="minorInterval">Minor Interval (m)</label>
                     <input type="number" id="minor-interval" value="0.2" min="0.01" step="0.1">
                 </div>
                 
                 <div class="control-group">
-                    <label for="major-interval">Major Interval (m)</label>
+                    <label for="major-interval" data-i18n="majorInterval">Major Interval (m)</label>
                     <input type="number" id="major-interval" value="1.0" min="0.1" step="0.5">
                 </div>
                 
                 <div class="control-group">
-                    <label for="max-distance">Max Edge Distance (0 = auto)</label>
+                    <label for="max-distance" data-i18n="maxDistance">Max Edge Distance (0 = auto)</label>
                     <input type="number" id="max-distance" value="0" min="0" step="0.5">
                 </div>
             </div>
             
             <div class="section">
-                <h2>Display Options</h2>
+                <h2 data-i18n="displayOptions">Display Options</h2>
                 
                 <div class="control-group checkbox-group">
                     <input type="checkbox" id="show-points">
-                    <label for="show-points">Show Data Points</label>
+                    <label for="show-points" data-i18n="showDataPoints">Show Data Points</label>
                 </div>
                 
                 <div class="control-group checkbox-group">
                     <input type="checkbox" id="show-labels" checked>
-                    <label for="show-labels">Show Elevation Labels</label>
+                    <label for="show-labels" data-i18n="showElevationLabels">Show Elevation Labels</label>
                 </div>
                 
                 <div class="control-group">
-                    <label for="color-scheme">Color Scheme</label>
+                    <label for="color-scheme" data-i18n="colorScheme">Color Scheme</label>
                     <select id="color-scheme">
-                        <option value="terrain">Terrain</option>
-                        <option value="viridis">Viridis</option>
-                        <option value="mono">Monochrome</option>
-                        <option value="topo">Topographic</option>
+                        <option value="terrain" data-i18n="terrain">Terrain</option>
+                        <option value="viridis" data-i18n="viridis">Viridis</option>
+                        <option value="mono" data-i18n="monochrome">Monochrome</option>
+                        <option value="topo" data-i18n="topographic">Topographic</option>
                     </select>
                 </div>
                 
                 <div class="legend">
                     <div class="legend-item">
                         <div class="legend-line major"></div>
-                        <span>Major</span>
+                        <span data-i18n="major">Major</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-line minor"></div>
-                        <span>Minor</span>
+                        <span data-i18n="minor">Minor</span>
                     </div>
                 </div>
             </div>
             
             <div class="section">
-                <button id="update-btn">Update Contours</button>
+                <button id="update-btn" data-i18n="updateContours">Update Contours</button>
             </div>
             
             <div class="section">
-                <div id="status" class="status loading">Loading...</div>
+                <div id="status" class="status loading" data-i18n="loading">Loading...</div>
             </div>
             
             <div class="section">
-                <h2>Contour Stats</h2>
+                <h2 data-i18n="contourStats">Contour Stats</h2>
                 <div class="stats" id="contour-stats">
                     <div class="stats-row">
-                        <span class="stats-label">Levels</span>
+                        <span class="stats-label" data-i18n="levels">Levels</span>
                         <span class="stats-value" id="stat-levels">-</span>
                     </div>
                     <div class="stats-row">
-                        <span class="stats-label">Segments</span>
+                        <span class="stats-label" data-i18n="segments">Segments</span>
                         <span class="stats-value" id="stat-segments">-</span>
                     </div>
                 </div>
@@ -327,6 +337,119 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
+        // Translations
+        const translations = {
+            en: {
+                title: 'Contour Viewer',
+                appTitle: 'Contour Viewer',
+                language: 'Language',
+                dataInfo: 'Data Info',
+                points: 'Points',
+                zMin: 'Z Min',
+                zMax: 'Z Max',
+                contourSettings: 'Contour Settings',
+                minorInterval: 'Minor Interval (m)',
+                majorInterval: 'Major Interval (m)',
+                maxDistance: 'Max Edge Distance (0 = auto)',
+                displayOptions: 'Display Options',
+                showDataPoints: 'Show Data Points',
+                showElevationLabels: 'Show Elevation Labels',
+                colorScheme: 'Color Scheme',
+                terrain: 'Terrain',
+                viridis: 'Viridis',
+                monochrome: 'Monochrome',
+                topographic: 'Topographic',
+                major: 'Major',
+                minor: 'Minor',
+                updateContours: 'Update Contours',
+                loading: 'Loading...',
+                contourStats: 'Contour Stats',
+                levels: 'Levels',
+                segments: 'Segments',
+                loadingBounds: 'Loading bounds...',
+                generatingContours: 'Generating contours...',
+                loadedSegments: 'Loaded {count} segments',
+                error: 'Error: {message}',
+                loadingPoints: 'Loading points...',
+                pointsLoaded: 'Points loaded',
+                errorLoadingPoints: 'Error loading points: {message}',
+                elevation: 'Elevation: {z}m'
+            },
+            cs: {
+                title: 'Prohlížeč vrstevnic',
+                appTitle: 'Prohlížeč vrstevnic',
+                language: 'Jazyk',
+                dataInfo: 'Informace o datech',
+                points: 'Body',
+                zMin: 'Z Min',
+                zMax: 'Z Max',
+                contourSettings: 'Nastavení vrstevnic',
+                minorInterval: 'Vedlejší interval (m)',
+                majorInterval: 'Hlavní interval (m)',
+                maxDistance: 'Max. vzdálenost hrany (0 = auto)',
+                displayOptions: 'Možnosti zobrazení',
+                showDataPoints: 'Zobrazit datové body',
+                showElevationLabels: 'Zobrazit popisky výšek',
+                colorScheme: 'Barevné schéma',
+                terrain: 'Terén',
+                viridis: 'Viridis',
+                monochrome: 'Černobílé',
+                topographic: 'Topografické',
+                major: 'Hlavní',
+                minor: 'Vedlejší',
+                updateContours: 'Aktualizovat vrstevnice',
+                loading: 'Načítání...',
+                contourStats: 'Statistiky vrstevnic',
+                levels: 'Úrovně',
+                segments: 'Segmenty',
+                loadingBounds: 'Načítání hranic...',
+                generatingContours: 'Generování vrstevnic...',
+                loadedSegments: 'Načteno {count} segmentů',
+                error: 'Chyba: {message}',
+                loadingPoints: 'Načítání bodů...',
+                pointsLoaded: 'Body načteny',
+                errorLoadingPoints: 'Chyba při načítání bodů: {message}',
+                elevation: 'Výška: {z} m'
+            }
+        };
+        
+        let currentLanguage = 'en';
+        
+        function t(key, params = {}) {
+            let text = translations[currentLanguage][key] || translations.en[key] || key;
+            Object.keys(params).forEach(param => {
+                text = text.replace(`{${param}}`, params[param]);
+            });
+            return text;
+        }
+        
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (el.tagName === 'TITLE') {
+                    document.title = t(key) + ' - {{ filename }}';
+                } else {
+                    el.textContent = t(key);
+                }
+            });
+            document.documentElement.lang = currentLanguage;
+        }
+        
+        function setLanguage(lang) {
+            currentLanguage = lang;
+            localStorage.setItem('contour-viewer-language', lang);
+            applyTranslations();
+        }
+        
+        function loadLanguage() {
+            const savedLang = localStorage.getItem('contour-viewer-language');
+            if (savedLang && translations[savedLang]) {
+                currentLanguage = savedLang;
+                document.getElementById('language-select').value = savedLang;
+            }
+            applyTranslations();
+        }
+        
         // Settings persistence
         const STORAGE_KEY = 'contour-viewer-settings';
         
@@ -415,7 +538,7 @@
         // Fetch bounds and initialize view
         async function initializeMap() {
             try {
-                setStatus('Loading bounds...', 'loading');
+                setStatus(t('loadingBounds'), 'loading');
                 const response = await fetch('/api/bounds');
                 bounds = await response.json();
                 
@@ -433,7 +556,7 @@
                 await updateContours();
                 
             } catch (error) {
-                setStatus(`Error: ${error.message}`, 'error');
+                setStatus(t('error', { message: error.message }), 'error');
                 console.error(error);
             }
         }
@@ -446,7 +569,7 @@
             const colorScheme = document.getElementById('color-scheme').value;
             const showLabels = document.getElementById('show-labels').checked;
             
-            setStatus('Generating contours...', 'loading');
+            setStatus(t('generatingContours'), 'loading');
             
             try {
                 // Build query params
@@ -477,7 +600,7 @@
                     },
                     onEachFeature: (feature, layer) => {
                         const z = feature.properties.elevation.toFixed(2);
-                        layer.bindTooltip(`Elevation: ${z}m`, {
+                        layer.bindTooltip(t('elevation', { z: z }), {
                             className: 'elevation-tooltip',
                             sticky: true
                         });
@@ -516,10 +639,10 @@
                 document.getElementById('stat-levels').textContent = data.meta.num_levels;
                 document.getElementById('stat-segments').textContent = data.meta.num_segments;
                 
-                setStatus(`Loaded ${data.meta.num_segments} segments`, 'success');
+                setStatus(t('loadedSegments', { count: data.meta.num_segments }), 'success');
                 
             } catch (error) {
-                setStatus(`Error: ${error.message}`, 'error');
+                setStatus(t('error', { message: error.message }), 'error');
                 console.error(error);
             }
         }
@@ -529,7 +652,7 @@
             const showPoints = document.getElementById('show-points').checked;
             
             if (showPoints && !pointsLayer) {
-                setStatus('Loading points...', 'loading');
+                setStatus(t('loadingPoints'), 'loading');
                 try {
                     const response = await fetch('/api/points');
                     const data = await response.json();
@@ -554,9 +677,9 @@
                             });
                         }
                     });
-                    setStatus('Points loaded', 'success');
+                    setStatus(t('pointsLoaded'), 'success');
                 } catch (error) {
-                    setStatus(`Error loading points: ${error.message}`, 'error');
+                    setStatus(t('errorLoadingPoints', { message: error.message }), 'error');
                     return;
                 }
             }
@@ -587,14 +710,18 @@
             saveSettings();
             updateContours();
         });
+        document.getElementById('language-select').addEventListener('change', (e) => {
+            setLanguage(e.target.value);
+        });
         
         // Save settings on input change (for number fields)
         document.getElementById('minor-interval').addEventListener('change', saveSettings);
         document.getElementById('major-interval').addEventListener('change', saveSettings);
         document.getElementById('max-distance').addEventListener('change', saveSettings);
         
-        // Initialize: load settings then initialize map
+        // Initialize: load settings and language, then initialize map
         loadSettings();
+        loadLanguage();
         initializeMap();
         
         // Apply show-points if it was saved as checked
