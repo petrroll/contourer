@@ -179,6 +179,36 @@ def create_app(
             }
         })
     
+    @app.route('/api/mesh')
+    def get_mesh():
+        """Get the triangulated mesh data for 3D visualization."""
+        points, z_stats = get_cached_data()
+        
+        # Get parameters from request
+        max_distance = request.args.get('max_distance', type=float)
+        
+        # Get triangulation
+        triangulation = get_triangulation(max_distance)
+        
+        # Get vertices and triangles
+        x = triangulation.x.tolist()
+        y = triangulation.y.tolist()
+        z = points[:, 2].tolist()
+        
+        # Get triangles (indices into vertices), excluding masked ones
+        triangles = triangulation.get_masked_triangles().tolist()
+        
+        return jsonify({
+            'vertices': {
+                'x': x,
+                'y': y,
+                'z': z
+            },
+            'triangles': triangles,
+            'z_min': z_stats['min'],
+            'z_max': z_stats['max'],
+        })
+    
     @app.route('/api/export')
     def export_files():
         """Export contour lines and map to ./data/out folder, just like CLI."""

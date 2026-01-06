@@ -325,6 +325,91 @@
             color: #c62828;
             border: 1px solid #ffcdd2;
         }
+        
+        /* View mode tabs */
+        .view-tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        
+        .view-tab {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #fff;
+            color: #666;
+            font-size: 0.9em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        
+        .view-tab:hover {
+            background: #f5f5f5;
+        }
+        
+        .view-tab.active {
+            background: #4caf50;
+            color: white;
+            border-color: #4caf50;
+        }
+        
+        /* 3D canvas */
+        #canvas-3d {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        
+        #map-container {
+            flex: 1;
+            position: relative;
+            background: #fafafa;
+        }
+        
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #fafafa;
+        }
+        
+        /* 3D controls info */
+        .controls-3d-info {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        .controls-3d-info.visible {
+            display: block;
+        }
+        
+        .controls-3d-info ul {
+            margin: 5px 0 0 15px;
+            padding: 0;
+        }
+        
+        /* 3D settings */
+        .setting-3d {
+            display: none;
+        }
+        
+        .setting-3d.visible {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -332,6 +417,13 @@
         <div id="sidebar">
             <h1>🗺️ <span data-i18n="appTitle">Contour Viewer</span></h1>
             <p class="subtitle">{{ filename }}</p>
+            
+            <div class="section">
+                <div class="view-tabs">
+                    <button class="view-tab active" id="view-2d-tab" data-i18n="view2D">2D Map</button>
+                    <button class="view-tab" id="view-3d-tab" data-i18n="view3D">3D View</button>
+                </div>
+            </div>
             
             <div class="section">
                 <div class="control-group">
@@ -393,6 +485,21 @@
                     <label for="show-labels" data-i18n="showElevationLabels">Show Elevation Labels</label>
                 </div>
                 
+                <div class="control-group checkbox-group setting-3d" id="show-contours-3d-group">
+                    <input type="checkbox" id="show-contours-3d" checked>
+                    <label for="show-contours-3d" data-i18n="showContours3D">Show Contour Lines on 3D</label>
+                </div>
+                
+                <div class="control-group checkbox-group setting-3d" id="show-wireframe-group">
+                    <input type="checkbox" id="show-wireframe">
+                    <label for="show-wireframe" data-i18n="showWireframe">Show Wireframe</label>
+                </div>
+                
+                <div class="control-group setting-3d" id="z-scale-group">
+                    <label for="z-scale" data-i18n="zScale">Z Scale (exaggeration)</label>
+                    <input type="number" id="z-scale" value="1" min="0.1" max="10" step="0.1">
+                </div>
+                
                 <div class="control-group">
                     <label for="color-scheme" data-i18n="colorScheme">Color Scheme</label>
                     <select id="color-scheme">
@@ -412,6 +519,15 @@
                         <div class="legend-line minor"></div>
                         <span data-i18n="minor">Minor</span>
                     </div>
+                </div>
+                
+                <div class="controls-3d-info" id="controls-3d-info">
+                    <strong data-i18n="controls3D">3D Controls:</strong>
+                    <ul>
+                        <li data-i18n="controlRotate">Left-click + drag: Rotate</li>
+                        <li data-i18n="controlZoom">Scroll: Zoom</li>
+                        <li data-i18n="controlPan">Right-click + drag: Pan</li>
+                    </ul>
                 </div>
             </div>
             
@@ -464,11 +580,18 @@
             </div>
         </div>
         
-        <div id="map"></div>
+        <div id="map-container">
+            <div id="map"></div>
+            <canvas id="canvas-3d"></canvas>
+        </div>
     </div>
     
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Three.js (using older version with global script support) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     
     <script>
         // Translations
@@ -514,7 +637,18 @@
                 exportFiles: 'Export to ./data/out',
                 exporting: 'Exporting...',
                 exportSuccess: 'Exported: {txt} and {pdf}',
-                exportError: 'Export failed: {message}'
+                exportError: 'Export failed: {message}',
+                view2D: '2D Map',
+                view3D: '3D View',
+                showContours3D: 'Show Contour Lines on 3D',
+                showWireframe: 'Show Wireframe',
+                zScale: 'Z Scale (exaggeration)',
+                controls3D: '3D Controls:',
+                controlRotate: 'Left-click + drag: Rotate',
+                controlZoom: 'Scroll: Zoom',
+                controlPan: 'Right-click + drag: Pan',
+                loading3D: 'Loading 3D mesh...',
+                loaded3D: '3D mesh loaded'
             },
             cs: {
                 title: 'Prohlížeč vrstevnic',
@@ -557,7 +691,18 @@
                 exportFiles: 'Exportovat do ./data/out',
                 exporting: 'Exportování...',
                 exportSuccess: 'Exportováno: {txt} a {pdf}',
-                exportError: 'Export selhal: {message}'
+                exportError: 'Export selhal: {message}',
+                view2D: '2D Mapa',
+                view3D: '3D Pohled',
+                showContours3D: 'Zobrazit vrstevnice na 3D',
+                showWireframe: 'Zobrazit drátový model',
+                zScale: 'Měřítko Z (přehánění)',
+                controls3D: 'Ovládání 3D:',
+                controlRotate: 'Levé tlačítko + tažení: Otáčení',
+                controlZoom: 'Kolečko: Přiblížení',
+                controlPan: 'Pravé tlačítko + tažení: Posun',
+                loading3D: 'Načítání 3D modelu...',
+                loaded3D: '3D model načten'
             }
         };
         
@@ -609,6 +754,9 @@
                 showPoints: document.getElementById('show-points').checked,
                 showLabels: document.getElementById('show-labels').checked,
                 colorScheme: document.getElementById('color-scheme').value,
+                showContours3D: document.getElementById('show-contours-3d').checked,
+                showWireframe: document.getElementById('show-wireframe').checked,
+                zScale: document.getElementById('z-scale').value,
             };
             localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
         }
@@ -624,6 +772,9 @@
                     if (settings.showPoints !== undefined) document.getElementById('show-points').checked = settings.showPoints;
                     if (settings.showLabels !== undefined) document.getElementById('show-labels').checked = settings.showLabels;
                     if (settings.colorScheme) document.getElementById('color-scheme').value = settings.colorScheme;
+                    if (settings.showContours3D !== undefined) document.getElementById('show-contours-3d').checked = settings.showContours3D;
+                    if (settings.showWireframe !== undefined) document.getElementById('show-wireframe').checked = settings.showWireframe;
+                    if (settings.zScale) document.getElementById('z-scale').value = settings.zScale;
                 } catch (e) {
                     console.warn('Failed to load settings:', e);
                 }
@@ -960,11 +1111,496 @@
             }
         }
         
+        // ==================== 3D View ====================
+        let currentView = '2d';
+        let renderer = null;
+        let scene = null;
+        let camera = null;
+        let controls = null;
+        let meshObject = null;
+        let wireframeObject = null;
+        let contourLinesObject = null;
+        let boundingBoxObject = null;
+        let meshData = null;
+        let animationId = null;
+        
+        // Color functions for 3D (return RGB values 0-1)
+        const colorSchemes3D = {
+            terrain: (t) => {
+                // Green -> Yellow -> Brown -> White
+                if (t < 0.25) return { r: 0.2 + t * 0.8, g: 0.4 + t * 1.2, b: 0.2 };
+                if (t < 0.5) return { r: 0.4 + (t - 0.25) * 2.4, g: 0.7 - (t - 0.25) * 0.6, b: 0.2 };
+                if (t < 0.75) return { r: 0.8, g: 0.5 - (t - 0.5) * 0.6, b: 0.2 + (t - 0.5) * 0.6 };
+                return { r: 0.8 + (t - 0.75) * 0.8, g: 0.5 + (t - 0.75) * 2.0, b: 0.5 + (t - 0.75) * 2.0 };
+            },
+            viridis: (t) => {
+                // Purple -> Blue -> Green -> Yellow
+                const r = 0.267 + t * 0.693;
+                const g = 0.004 + t * 0.868;
+                const b = 0.329 + t * (t < 0.5 ? 0.4 : -0.4);
+                return { r: Math.min(1, r), g: Math.min(1, g), b: Math.max(0, b) };
+            },
+            mono: (t) => {
+                const v = 0.2 + t * 0.6;
+                return { r: v, g: v, b: v };
+            },
+            topo: (t) => {
+                if (t < 0.2) return { r: 0.176, g: 0.353, b: 0.153 };
+                if (t < 0.4) return { r: 0.420, g: 0.557, b: 0.137 };
+                if (t < 0.6) return { r: 0.831, g: 0.647, b: 0.455 };
+                if (t < 0.8) return { r: 0.627, g: 0.322, b: 0.176 };
+                return { r: 0.545, g: 0.271, b: 0.075 };
+            }
+        };
+        
+        function init3DView() {
+            const canvas = document.getElementById('canvas-3d');
+            const container = document.getElementById('map-container');
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0xf5f5f5);
+            
+            // Create scene
+            scene = new THREE.Scene();
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 10000);
+            camera.position.set(0, -100, 100);
+            camera.up.set(0, 0, 1);
+            
+            // Create controls
+            controls = new THREE.OrbitControls(camera, canvas);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.1;
+            controls.rotateSpeed = 0.5;
+            controls.zoomSpeed = 1.2;
+            controls.panSpeed = 0.8;
+            controls.enablePan = true;
+            controls.enableZoom = true;
+            controls.enableRotate = true;
+            controls.screenSpacePanning = true; // Pan parallel to screen
+            controls.minDistance = 10;
+            controls.maxDistance = 1000;
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(1, 1, 2);
+            scene.add(directionalLight);
+            
+            const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            directionalLight2.position.set(-1, -1, 0.5);
+            scene.add(directionalLight2);
+            
+            // Handle resize
+            window.addEventListener('resize', on3DResize);
+        }
+        
+        function on3DResize() {
+            if (!renderer || currentView !== '3d') return;
+            
+            const container = document.getElementById('map-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+        
+        function animate3D() {
+            if (currentView !== '3d') return;
+            
+            animationId = requestAnimationFrame(animate3D);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        async function load3DMesh() {
+            if (meshData) return; // Already loaded
+            
+            setStatus(t('loading3D'), 'loading');
+            
+            const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            const params = new URLSearchParams();
+            if (maxDistance > 0) params.append('max_distance', maxDistance);
+            
+            try {
+                const response = await fetch(`/api/mesh?${params}`);
+                meshData = await response.json();
+                
+                create3DMesh();
+                setStatus(t('loaded3D'), 'success');
+            } catch (error) {
+                setStatus(t('error', { message: error.message }), 'error');
+                console.error(error);
+            }
+        }
+        
+        function create3DMesh() {
+            if (!meshData) return;
+            
+            // Remove existing mesh objects
+            if (meshObject) {
+                scene.remove(meshObject);
+                meshObject.geometry.dispose();
+                meshObject.material.dispose();
+            }
+            if (wireframeObject) {
+                scene.remove(wireframeObject);
+                wireframeObject.geometry.dispose();
+                wireframeObject.material.dispose();
+            }
+            if (contourLinesObject) {
+                scene.remove(contourLinesObject);
+                contourLinesObject.children.forEach(child => {
+                    child.geometry.dispose();
+                    child.material.dispose();
+                });
+            }
+            if (boundingBoxObject) {
+                scene.remove(boundingBoxObject);
+                boundingBoxObject.children.forEach(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+            
+            const { vertices, triangles, z_min, z_max } = meshData;
+            const zScale = parseFloat(document.getElementById('z-scale').value) || 1;
+            const colorScheme = document.getElementById('color-scheme').value;
+            const colorFn = colorSchemes3D[colorScheme] || colorSchemes3D.terrain;
+            
+            // Calculate center for normalization
+            const xArr = vertices.x;
+            const yArr = vertices.y;
+            const zArr = vertices.z;
+            
+            const xMin = Math.min(...xArr), xMax = Math.max(...xArr);
+            const yMin = Math.min(...yArr), yMax = Math.max(...yArr);
+            const xCenter = (xMin + xMax) / 2;
+            const yCenter = (yMin + yMax) / 2;
+            const zCenter = (z_min + z_max) / 2;
+            const scale = Math.max(xMax - xMin, yMax - yMin);
+            
+            // Create geometry
+            const geometry = new THREE.BufferGeometry();
+            
+            // Create vertices array (normalized to center)
+            const positions = new Float32Array(xArr.length * 3);
+            const colors = new Float32Array(xArr.length * 3);
+            
+            for (let i = 0; i < xArr.length; i++) {
+                positions[i * 3] = (xArr[i] - xCenter) / scale * 100;
+                positions[i * 3 + 1] = (yArr[i] - yCenter) / scale * 100;
+                positions[i * 3 + 2] = ((zArr[i] - zCenter) * zScale) / scale * 100;
+                
+                // Color based on elevation
+                const t = (zArr[i] - z_min) / (z_max - z_min);
+                const color = colorFn(t);
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            // Create indices
+            const indices = new Uint32Array(triangles.length * 3);
+            for (let i = 0; i < triangles.length; i++) {
+                indices[i * 3] = triangles[i][0];
+                indices[i * 3 + 1] = triangles[i][1];
+                indices[i * 3 + 2] = triangles[i][2];
+            }
+            geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+            geometry.computeVertexNormals();
+            
+            // Create mesh material
+            const material = new THREE.MeshLambertMaterial({
+                vertexColors: true,
+                side: THREE.DoubleSide
+            });
+            
+            meshObject = new THREE.Mesh(geometry, material);
+            scene.add(meshObject);
+            
+            // Create wireframe if enabled
+            const showWireframe = document.getElementById('show-wireframe').checked;
+            if (showWireframe) {
+                const wireframeMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x000000,
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.1
+                });
+                wireframeObject = new THREE.Mesh(geometry.clone(), wireframeMaterial);
+                scene.add(wireframeObject);
+            }
+            
+            // Create contour lines if enabled
+            const showContours3D = document.getElementById('show-contours-3d').checked;
+            if (showContours3D) {
+                create3DContours(xCenter, yCenter, zCenter, scale, zScale);
+            }
+            
+            // Create bounding box for better depth perception
+            createBoundingBox(xMin, xMax, yMin, yMax, z_min, z_max, xCenter, yCenter, zCenter, scale, zScale);
+            
+            // Position camera
+            camera.position.set(0, -150, 100);
+            camera.lookAt(0, 0, 0);
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+        
+        function createBoundingBox(xMin, xMax, yMin, yMax, zMin, zMax, xCenter, yCenter, zCenter, scale, zScale) {
+            boundingBoxObject = new THREE.Group();
+            
+            // Calculate normalized bounds
+            const x1 = (xMin - xCenter) / scale * 100;
+            const x2 = (xMax - xCenter) / scale * 100;
+            const y1 = (yMin - yCenter) / scale * 100;
+            const y2 = (yMax - yCenter) / scale * 100;
+            const z1 = ((zMin - zCenter) * zScale) / scale * 100;
+            const z2 = ((zMax - zCenter) * zScale) / scale * 100;
+            
+            // Material for box edges
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x666666, linewidth: 1 });
+            const gridMaterial = new THREE.LineBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.5 });
+            
+            // Create the 12 edges of the bounding box
+            const edges = [
+                // Bottom face
+                [[x1, y1, z1], [x2, y1, z1]],
+                [[x2, y1, z1], [x2, y2, z1]],
+                [[x2, y2, z1], [x1, y2, z1]],
+                [[x1, y2, z1], [x1, y1, z1]],
+                // Top face
+                [[x1, y1, z2], [x2, y1, z2]],
+                [[x2, y1, z2], [x2, y2, z2]],
+                [[x2, y2, z2], [x1, y2, z2]],
+                [[x1, y2, z2], [x1, y1, z2]],
+                // Vertical edges
+                [[x1, y1, z1], [x1, y1, z2]],
+                [[x2, y1, z1], [x2, y1, z2]],
+                [[x2, y2, z1], [x2, y2, z2]],
+                [[x1, y2, z1], [x1, y2, z2]],
+            ];
+            
+            edges.forEach(edge => {
+                const points = edge.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, edgeMaterial);
+                boundingBoxObject.add(line);
+            });
+            
+            // Add grid lines on the bottom face for reference
+            const gridDivisions = 5;
+            const xStep = (x2 - x1) / gridDivisions;
+            const yStep = (y2 - y1) / gridDivisions;
+            
+            // X-direction grid lines on bottom
+            for (let i = 1; i < gridDivisions; i++) {
+                const x = x1 + i * xStep;
+                const points = [
+                    new THREE.Vector3(x, y1, z1),
+                    new THREE.Vector3(x, y2, z1)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            // Y-direction grid lines on bottom
+            for (let i = 1; i < gridDivisions; i++) {
+                const y = y1 + i * yStep;
+                const points = [
+                    new THREE.Vector3(x1, y, z1),
+                    new THREE.Vector3(x2, y, z1)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            // Add vertical grid lines on back walls for elevation reference
+            const zStep = (z2 - z1) / gridDivisions;
+            
+            // Back wall (y = y2) - vertical lines
+            for (let i = 0; i <= gridDivisions; i++) {
+                const x = x1 + i * xStep;
+                const points = [
+                    new THREE.Vector3(x, y2, z1),
+                    new THREE.Vector3(x, y2, z2)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            // Back wall - horizontal lines
+            for (let i = 1; i < gridDivisions; i++) {
+                const z = z1 + i * zStep;
+                const points = [
+                    new THREE.Vector3(x1, y2, z),
+                    new THREE.Vector3(x2, y2, z)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            // Side wall (x = x1) - vertical lines
+            for (let i = 0; i <= gridDivisions; i++) {
+                const y = y1 + i * yStep;
+                const points = [
+                    new THREE.Vector3(x1, y, z1),
+                    new THREE.Vector3(x1, y, z2)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            // Side wall - horizontal lines
+            for (let i = 1; i < gridDivisions; i++) {
+                const z = z1 + i * zStep;
+                const points = [
+                    new THREE.Vector3(x1, y1, z),
+                    new THREE.Vector3(x1, y2, z)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, gridMaterial);
+                boundingBoxObject.add(line);
+            }
+            
+            scene.add(boundingBoxObject);
+        }
+        
+        async function create3DContours(xCenter, yCenter, zCenter, scale, zScale) {
+            // Fetch contour data
+            const minorInterval = parseFloat(document.getElementById('minor-interval').value);
+            const majorInterval = parseFloat(document.getElementById('major-interval').value);
+            const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            
+            const params = new URLSearchParams();
+            if (minorInterval > 0) params.append('minor_interval', minorInterval);
+            if (majorInterval > 0) params.append('major_interval', majorInterval);
+            if (maxDistance > 0) params.append('max_distance', maxDistance);
+            
+            try {
+                const response = await fetch(`/api/contours?${params}`);
+                const data = await response.json();
+                
+                contourLinesObject = new THREE.Group();
+                
+                data.features.forEach(feature => {
+                    const coords = feature.geometry.coordinates;
+                    const elevation = feature.properties.elevation;
+                    const isMajor = feature.properties.is_major;
+                    
+                    if (coords.length < 2) return;
+                    
+                    const points = coords.map(([x, y]) => {
+                        return new THREE.Vector3(
+                            (x - xCenter) / scale * 100,
+                            (y - yCenter) / scale * 100,
+                            ((elevation - zCenter) * zScale) / scale * 100 + 0.05 // Slight offset to render above mesh
+                        );
+                    });
+                    
+                    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                    const lineMaterial = new THREE.LineBasicMaterial({
+                        color: isMajor ? 0x333333 : 0x666666,
+                        linewidth: isMajor ? 2 : 1,
+                        transparent: true,
+                        opacity: isMajor ? 1.0 : 0.6
+                    });
+                    
+                    const line = new THREE.Line(lineGeometry, lineMaterial);
+                    contourLinesObject.add(line);
+                });
+                
+                scene.add(contourLinesObject);
+                
+            } catch (error) {
+                console.error('Error loading contours for 3D:', error);
+            }
+        }
+        
+        function switchView(view) {
+            currentView = view;
+            const mapEl = document.getElementById('map');
+            const canvasEl = document.getElementById('canvas-3d');
+            const tab2D = document.getElementById('view-2d-tab');
+            const tab3D = document.getElementById('view-3d-tab');
+            const controls3DInfo = document.getElementById('controls-3d-info');
+            const settings3D = document.querySelectorAll('.setting-3d');
+            
+            if (view === '2d') {
+                mapEl.style.display = 'block';
+                canvasEl.style.display = 'none';
+                tab2D.classList.add('active');
+                tab3D.classList.remove('active');
+                controls3DInfo.classList.remove('visible');
+                settings3D.forEach(el => el.classList.remove('visible'));
+                
+                // Stop 3D animation
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                
+                // Invalidate Leaflet map size
+                setTimeout(() => map.invalidateSize(), 100);
+                
+            } else {
+                mapEl.style.display = 'none';
+                canvasEl.style.display = 'block';
+                tab2D.classList.remove('active');
+                tab3D.classList.add('active');
+                controls3DInfo.classList.add('visible');
+                settings3D.forEach(el => el.classList.add('visible'));
+                
+                // Initialize 3D view if needed
+                if (!renderer) {
+                    init3DView();
+                }
+                
+                // Load mesh and start animation
+                load3DMesh().then(() => {
+                    on3DResize();
+                    animate3D();
+                });
+            }
+        }
+        
+        function update3DMesh() {
+            if (currentView === '3d' && meshData) {
+                create3DMesh();
+            }
+        }
+        
+        // Force reload mesh data (e.g., when max-distance changes)
+        function reload3DMesh() {
+            meshData = null;
+            if (currentView === '3d') {
+                load3DMesh();
+            }
+        }
+        
         // Event listeners
         document.getElementById('update-btn').addEventListener('click', () => {
             saveSettings();
             updateContours();
             updateCommandLine();
+            update3DMesh();
         });
         document.getElementById('show-points').addEventListener('change', () => {
             saveSettings();
@@ -977,12 +1613,31 @@
         document.getElementById('color-scheme').addEventListener('change', () => {
             saveSettings();
             updateContours();
+            update3DMesh();
         });
         document.getElementById('language-select').addEventListener('change', (e) => {
             setLanguage(e.target.value);
         });
         document.getElementById('copy-btn').addEventListener('click', copyCommand);
         document.getElementById('export-btn').addEventListener('click', exportFiles);
+        
+        // View tabs
+        document.getElementById('view-2d-tab').addEventListener('click', () => switchView('2d'));
+        document.getElementById('view-3d-tab').addEventListener('click', () => switchView('3d'));
+        
+        // 3D settings
+        document.getElementById('show-contours-3d').addEventListener('change', () => {
+            saveSettings();
+            update3DMesh();
+        });
+        document.getElementById('show-wireframe').addEventListener('change', () => {
+            saveSettings();
+            update3DMesh();
+        });
+        document.getElementById('z-scale').addEventListener('change', () => {
+            saveSettings();
+            update3DMesh();
+        });
         
         // Save settings on input change (for number fields) and update command line
         document.getElementById('minor-interval').addEventListener('change', () => {
@@ -996,6 +1651,7 @@
         document.getElementById('max-distance').addEventListener('change', () => {
             saveSettings();
             updateCommandLine();
+            reload3DMesh();
         });
         
         // Initialize: load settings and language, then initialize map
