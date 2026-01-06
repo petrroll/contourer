@@ -217,6 +217,61 @@
             font-size: 12px;
             color: #333;
         }
+        
+        /* Command line display */
+        .command-container {
+            position: relative;
+        }
+        
+        .command-display {
+            background: #1e1e1e;
+            color: #4caf50;
+            padding: 12px;
+            padding-right: 45px;
+            border-radius: 5px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.8em;
+            word-break: break-all;
+            white-space: pre-wrap;
+            border: 1px solid #333;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            background: #333;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .copy-btn:hover {
+            background: #444;
+        }
+        
+        .copy-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: #aaa;
+        }
+        
+        .copy-btn.copied {
+            background: #2e7d32;
+        }
+        
+        .copy-btn.copied svg {
+            fill: #fff;
+        }
     </style>
 </head>
 <body>
@@ -328,6 +383,21 @@
                     </div>
                 </div>
             </div>
+            
+            <div class="section">
+                <h2 data-i18n="commandLine">Command Line</h2>
+                <div class="command-container">
+                    <div class="command-display" id="command-display">uv run contour {{ filename }}</div>
+                    <button class="copy-btn" id="copy-btn" title="Copy to clipboard">
+                        <svg viewBox="0 0 24 24" id="copy-icon">
+                            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                        </svg>
+                        <svg viewBox="0 0 24 24" id="check-icon" style="display: none;">
+                            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
         
         <div id="map"></div>
@@ -373,7 +443,9 @@
                 loadingPoints: 'Loading points...',
                 pointsLoaded: 'Points loaded',
                 errorLoadingPoints: 'Error loading points: {message}',
-                elevation: 'Elevation: {z}m'
+                elevation: 'Elevation: {z}m',
+                commandLine: 'Command Line',
+                copied: 'Copied!'
             },
             cs: {
                 title: 'Prohlížeč vrstevnic',
@@ -409,7 +481,9 @@
                 loadingPoints: 'Načítání bodů...',
                 pointsLoaded: 'Body načteny',
                 errorLoadingPoints: 'Chyba při načítání bodů: {message}',
-                elevation: 'Výška: {z} m'
+                elevation: 'Výška: {z} m',
+                commandLine: 'Příkazový řádek',
+                copied: 'Zkopírováno!'
             }
         };
         
@@ -693,10 +767,77 @@
             }
         }
         
+        // Generate command line based on current settings
+        function generateCommandLine() {
+            const minorInterval = parseFloat(document.getElementById('minor-interval').value);
+            const majorInterval = parseFloat(document.getElementById('major-interval').value);
+            const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            
+            let cmd = 'uv run contourer "{{ filename }}"';
+            
+            if (minorInterval > 0) {
+                cmd += ` --minor-interval ${minorInterval}`;
+            }
+            if (majorInterval > 0) {
+                cmd += ` --major-interval ${majorInterval}`;
+            }
+            if (maxDistance > 0) {
+                cmd += ` --max-distance ${maxDistance}`;
+            }
+            
+            return cmd;
+        }
+        
+        // Update command line display
+        function updateCommandLine() {
+            const cmd = generateCommandLine();
+            document.getElementById('command-display').textContent = cmd;
+        }
+        
+        // Copy command to clipboard
+        async function copyCommand() {
+            const cmd = generateCommandLine();
+            const copyBtn = document.getElementById('copy-btn');
+            const copyIcon = document.getElementById('copy-icon');
+            const checkIcon = document.getElementById('check-icon');
+            
+            try {
+                await navigator.clipboard.writeText(cmd);
+                copyBtn.classList.add('copied');
+                copyIcon.style.display = 'none';
+                checkIcon.style.display = 'block';
+                
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    copyIcon.style.display = 'block';
+                    checkIcon.style.display = 'none';
+                }, 2000);
+            } catch (err) {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = cmd;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copyBtn.classList.add('copied');
+                copyIcon.style.display = 'none';
+                checkIcon.style.display = 'block';
+                
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    copyIcon.style.display = 'block';
+                    checkIcon.style.display = 'none';
+                }, 2000);
+            }
+        }
+        
         // Event listeners
         document.getElementById('update-btn').addEventListener('click', () => {
             saveSettings();
             updateContours();
+            updateCommandLine();
         });
         document.getElementById('show-points').addEventListener('change', () => {
             saveSettings();
@@ -713,15 +854,26 @@
         document.getElementById('language-select').addEventListener('change', (e) => {
             setLanguage(e.target.value);
         });
+        document.getElementById('copy-btn').addEventListener('click', copyCommand);
         
-        // Save settings on input change (for number fields)
-        document.getElementById('minor-interval').addEventListener('change', saveSettings);
-        document.getElementById('major-interval').addEventListener('change', saveSettings);
-        document.getElementById('max-distance').addEventListener('change', saveSettings);
+        // Save settings on input change (for number fields) and update command line
+        document.getElementById('minor-interval').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
+        document.getElementById('major-interval').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
+        document.getElementById('max-distance').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
         
         // Initialize: load settings and language, then initialize map
         loadSettings();
         loadLanguage();
+        updateCommandLine();
         initializeMap();
         
         // Apply show-points if it was saved as checked
