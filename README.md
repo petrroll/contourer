@@ -19,6 +19,7 @@ uv run contourer data/zakazka-body.txt [options]
 | `--output FILE` | Output file path (default: `./data/out/contour_lines.txt`) |
 | `--format {txt,geojson}` | Export format (default: txt) |
 | `--plot map.pdf` | Save visualization to vector PDF file |
+| `--show-points` | Show original data points on the visualization |
 
 ### Examples
 
@@ -28,6 +29,9 @@ uv run contourer data/zakazka-body.txt --plot data/out/contour_intervals.pdf
 
 # Major and minor contours at 0.2 and 1 meter
 uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1 --plot data/out/contour_intervals.pdf
+
+# Show original data points on the map
+uv run contourer data/zakazka-body.txt --plot data/out/map.pdf --show-points
 
 # Custom levels with GeoJSON export
 uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500 --format geojson

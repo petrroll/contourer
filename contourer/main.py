@@ -225,7 +225,8 @@ def create_visualization(
     z_values: np.ndarray,
     levels: list[float],
     output_path: Path,
-    major_levels: Optional[list[float]] = None
+    major_levels: Optional[list[float]] = None,
+    show_points: bool = False
 ) -> None:
     """Create top-down contour map visualization.
     
@@ -235,6 +236,7 @@ def create_visualization(
         levels: All contour levels to draw
         output_path: Path to save the image
         major_levels: Optional list of major levels to draw with thicker lines
+        show_points: Whether to show original data points on the map
     """
     # Center coordinates around origin for display
     x_centered = triangulation.x - np.mean(triangulation.x)
@@ -264,6 +266,11 @@ def create_visualization(
     else:
         # No major/minor distinction - draw all lines the same
         ax.tricontour(centered_tri, z_values, levels=levels, colors='black', linewidths=0.5)
+    
+    # Plot original point coordinates if requested
+    if show_points:
+        ax.scatter(x_centered, y_centered, c=z_values, cmap='terrain', 
+                   s=10, edgecolors='black', linewidths=0.3, alpha=0.8, zorder=5)
     
     # Add colorbar
     cbar = plt.colorbar(contourf, ax=ax, label='Elevation (Z)')
@@ -380,6 +387,11 @@ def main():
         type=Path,
         help="Save visualization to PDF file (e.g., map.pdf)"
     )
+    parser.add_argument(
+        "--show-points",
+        action="store_true",
+        help="Show original data points on the visualization"
+    )
     
     args = parser.parse_args()
     
@@ -439,7 +451,7 @@ def main():
     if args.plot:
         print("\nCreating visualization...")
         args.plot.parent.mkdir(parents=True, exist_ok=True)
-        create_visualization(triangulation, points[:, 2], levels, args.plot, major_levels)
+        create_visualization(triangulation, points[:, 2], levels, args.plot, major_levels, args.show_points)
     
     print("\nDone!")
     return 0
