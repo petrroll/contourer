@@ -1,6 +1,6 @@
 [project]
 name = "contourer"
-version = "0.1.5"
+version = "0.1.6"
 description = "Point Cloud Contour Line Generator"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,3 +21,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["contourer*"]
+
+[tool.setuptools.package-data]
+contourer = ["templates/*.html"]
