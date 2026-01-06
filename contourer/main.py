@@ -369,12 +369,6 @@ def main():
         help="Max triangle edge length filter (default: 1.5× median)"
     )
     parser.add_argument(
-        "--format",
-        choices=["txt", "geojson"],
-        default="txt",
-        help="Export format (default: txt)"
-    )
-    parser.add_argument(
         "--plot",
         action="store_true",
         help="Generate visualization PDF"
@@ -454,12 +448,10 @@ def main():
     total_segments = sum(len(segs) for segs in contours.values())
     print(f"Generated {total_segments} contour segments across {len(levels)} levels")
     
-    # Export contours
-    if args.format == "geojson":
-        geojson_path = contour_output_path.with_suffix('.geojson')
-        export_contours_geojson(contours, geojson_path)
-    else:
-        export_contours_txt(contours, contour_output_path)
+    # Export contours in both formats
+    export_contours_txt(contours, contour_output_path)
+    geojson_path = contour_output_path.with_suffix('.geojson')
+    export_contours_geojson(contours, geojson_path)
     
     # Create visualization if requested
     if args.plot:

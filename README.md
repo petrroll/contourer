@@ -11,8 +11,11 @@ uv run contourer data/zakazka-body.txt [options]
 ### Output Files
 
 Output files are automatically named based on the input filename and saved to `./data/out/`:
-- `<inputFileName>_contour.txt` (or `.geojson`) - Contour line data
+- `<inputFileName>_contour.txt` - Contour line data in custom text format
+- `<inputFileName>_contour.geojson` - Contour line data in GeoJSON format
 - `<inputFileName>_map.pdf` - Visualization (when `--plot` is used)
+
+Both `.txt` and `.json` formats are always exported together.
 
 ### Options
 
@@ -22,7 +25,6 @@ Output files are automatically named based on the input filename and saved to `.
 | `--minor-interval 0.2` | Interval for minor contour lines (overrides --levels) |
 | `--major-interval 1.0` | Interval for major contour lines (visualization only, defaults to 5× minor) |
 | `--max-distance 5.0` | Max triangle edge length filter (default: 1.5× median) |
-| `--format {txt,geojson}` | Export format (default: txt) |
 | `--plot` | Generate visualization PDF |
 | `--show-points` | Show original data points on the visualization |
 | `--web` | Launch interactive browser-based viewer |
@@ -40,8 +42,8 @@ uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1 -
 # Show original data points on the map
 uv run contourer data/zakazka-body.txt --plot --show-points
 
-# Custom levels with GeoJSON export
-uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500 --format geojson
+# Custom levels
+uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500
 
 # Launch interactive web viewer
 uv run contourer data/zakazka-body.txt --web
@@ -72,5 +74,7 @@ Space-separated: `ID X Y Z` (columns 2-4 used)
 
 ## Output Formats
 
-- **txt**: `z_value: x1,y1; x2,y2; ...` per segment
-- **geojson**: FeatureCollection with LineString geometries
+Both formats are always exported together:
+
+- **txt**: `z_value: x1,y1; x2,y2; ...` per segment (custom format)
+- **json**: GeoJSON FeatureCollection with LineString geometries

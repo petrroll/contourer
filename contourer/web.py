@@ -15,6 +15,7 @@ from .main import (
     generate_auto_levels,
     generate_interval_levels,
     export_contours_txt,
+    export_contours_geojson,
     create_visualization,
 )
 
@@ -193,8 +194,10 @@ def create_app(file_path: Path) -> Flask:
         contour_output_path = output_dir / f"{input_stem}_contour.txt"
         map_output_path = output_dir / f"{input_stem}_map.pdf"
         
-        # Export contour txt using existing function
+        # Export contours in both formats
         export_contours_txt(contours, contour_output_path)
+        geojson_path = contour_output_path.with_suffix('.geojson')
+        export_contours_geojson(contours, geojson_path)
         
         # Create visualization PDF using existing function
         create_visualization(
@@ -210,6 +213,7 @@ def create_app(file_path: Path) -> Flask:
             "success": True,
             "files": {
                 "txt": str(contour_output_path),
+                "geojson": str(geojson_path),
                 "pdf": str(map_output_path)
             }
         })
