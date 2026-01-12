@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import ezdxf
+from ezdxf import units
 import matplotlib
 matplotlib.use('Agg')  # Use non-GUI backend to avoid threading issues with Flask
 import matplotlib.pyplot as plt
@@ -356,6 +358,106 @@ def export_contours_geojson(
     print(f"Contour lines exported to GeoJSON: {output_path}")
 
 
+def export_contours_dxf(
+    contours: dict[float, list[list[tuple[float, float]]]], 
+    output_path: Path,
+    major_levels: Optional[list[float]] = None,
+    use_3d: bool = True
+) -> None:
+    """Export contour lines to DXF format for AutoCAD import.
+    
+    Creates a DXF file with contour lines organized into layers:
+    - Each elevation level gets its own layer named 'CONTOUR_<elevation>'
+    - Major contour levels are placed on layers named 'CONTOUR_MAJOR_<elevation>'
+    - Contour lines are drawn as polylines with Z coordinate at the elevation
+    
+    Args:
+        contours: Dict mapping Z level to list of contour line segments
+        output_path: Path to save the DXF file
+        major_levels: Optional list of major contour levels (drawn with thicker lines)
+        use_3d: If True, create 3D polylines with Z at elevation; if False, 2D polylines
+    """
+    # Create a new DXF document (using R2010 for wide compatibility)
+    doc = ezdxf.new('R2010')
+    doc.units = units.M  # Set units to meters
+    
+    # Get the modelspace where we'll add entities
+    msp = doc.modelspace()
+    
+    # Create a set for quick major level lookup
+    major_set = set(major_levels) if major_levels else set()
+    
+    # Define colors for contour lines
+    # AutoCAD color indices: 7=white/black, 1=red, 2=yellow, 3=green, 4=cyan, 5=blue
+    MINOR_COLOR = 8  # Gray
+    MAJOR_COLOR = 7  # White/Black (standard)
+    
+    # Track created layers to avoid duplicates
+    created_layers = set()
+    
+    for z_level in sorted(contours.keys()):
+        segments = contours[z_level]
+        
+        if not segments:
+            continue
+            
+        is_major = z_level in major_set
+        
+        # Create layer name (sanitize for DXF compatibility)
+        # DXF layer names can't contain certain characters
+        z_str = f"{z_level:.2f}".replace('.', '_').replace('-', 'N')
+        if is_major:
+            layer_name = f"CONTOUR_MAJOR_{z_str}"
+            color = MAJOR_COLOR
+            lineweight = 35  # 0.35mm for major contours
+        else:
+            layer_name = f"CONTOUR_{z_str}"
+            color = MINOR_COLOR
+            lineweight = 18  # 0.18mm for minor contours
+        
+        # Create layer if it doesn't exist
+        if layer_name not in created_layers:
+            doc.layers.add(
+                layer_name,
+                color=color,
+                lineweight=lineweight,
+            )
+            created_layers.add(layer_name)
+        
+        # Add contour segments as polylines
+        for segment in segments:
+            if len(segment) < 2:
+                continue
+                
+            if use_3d:
+                # Create 3D polyline with Z coordinate at elevation
+                points_3d = [(x, y, z_level) for x, y in segment]
+                msp.add_polyline3d(
+                    points_3d,
+                    dxfattribs={'layer': layer_name}
+                )
+            else:
+                # Create 2D polyline (LWPolyline)
+                points_2d = [(x, y) for x, y in segment]
+                msp.add_lwpolyline(
+                    points_2d,
+                    dxfattribs={
+                        'layer': layer_name,
+                        'elevation': z_level,  # Store elevation as attribute
+                    }
+                )
+    
+    # Save the DXF file
+    doc.saveas(output_path)
+    
+    total_segments = sum(len(segs) for segs in contours.values())
+    print(f"Contour lines exported to DXF: {output_path}")
+    print(f"  - {len(created_layers)} layers created")
+    print(f"  - {total_segments} polylines exported")
+    if major_levels:
+        print(f"  - {len(major_set)} major contour levels")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate contour lines from point cloud terrain data"
@@ -402,6 +504,12 @@ def main():
         type=int,
         default=5000,
         help="Port for web server (default: 5000)"
+    )
+    parser.add_argument(
+        "--formats",
+        type=str,
+        default=None,
+        help="Comma-separated list of export formats: pdf,txt,geojson,dxf (default: all)"
     )
     
     args = parser.parse_args()
@@ -469,14 +577,36 @@ def main():
     total_segments = sum(len(segs) for segs in contours.values())
     print(f"Generated {total_segments} contour segments across {len(levels)} levels")
     
-    # Export contours in all three formats
-    export_contours_txt(contours, contour_output_path)
-    geojson_path = contour_output_path.with_suffix('.geojson')
-    export_contours_geojson(contours, geojson_path)
+    # Determine which formats to export
+    all_formats = {'pdf', 'txt', 'geojson', 'dxf'}
+    if args.formats:
+        selected_formats = set(f.strip().lower() for f in args.formats.split(','))
+        invalid_formats = selected_formats - all_formats
+        if invalid_formats:
+            print(f"Warning: Unknown format(s) ignored: {', '.join(invalid_formats)}")
+        selected_formats = selected_formats & all_formats
+        if not selected_formats:
+            print("Error: No valid formats specified")
+            return 1
+    else:
+        selected_formats = all_formats
+    
+    print(f"\nExporting formats: {', '.join(sorted(selected_formats))}")
+    
+    # Export contours in selected formats
+    if 'txt' in selected_formats:
+        export_contours_txt(contours, contour_output_path)
+    if 'geojson' in selected_formats:
+        geojson_path = contour_output_path.with_suffix('.geojson')
+        export_contours_geojson(contours, geojson_path)
+    if 'dxf' in selected_formats:
+        dxf_path = contour_output_path.with_suffix('.dxf')
+        export_contours_dxf(contours, dxf_path, major_levels)
     
     # Create visualization PDF
-    print("\nCreating visualization...")
-    create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
+    if 'pdf' in selected_formats:
+        print("\nCreating visualization...")
+        create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
     
     print("\nDone!")
     return 0

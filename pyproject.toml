@@ -10,6 +10,7 @@ dependencies = [
     "matplotlib>=3.8.0",
     "shapely>=2.0.0",
     "flask>=3.0.0",
+    "ezdxf>=1.0.0",
 ]
 
 [project.scripts]

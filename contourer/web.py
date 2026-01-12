@@ -16,6 +16,7 @@ from .main import (
     generate_interval_levels,
     export_contours_txt,
     export_contours_geojson,
+    export_contours_dxf,
     create_visualization,
 )
 
@@ -243,10 +244,12 @@ def create_app(
         contour_output_path = output_dir / f"{input_stem}_contour.txt"
         map_output_path = output_dir / f"{input_stem}_map.pdf"
         
-        # Export contours in both formats
+        # Export contours in all formats
         export_contours_txt(contours, contour_output_path)
         geojson_path = contour_output_path.with_suffix('.geojson')
         export_contours_geojson(contours, geojson_path)
+        dxf_path = contour_output_path.with_suffix('.dxf')
+        export_contours_dxf(contours, dxf_path, major_levels)
         
         # Create visualization PDF using existing function
         create_visualization(
@@ -263,6 +266,7 @@ def create_app(
             "files": {
                 "txt": str(contour_output_path),
                 "geojson": str(geojson_path),
+                "dxf": str(dxf_path),
                 "pdf": str(map_output_path)
             }
         })
