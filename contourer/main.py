@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import matplotlib
+matplotlib.use('Agg')  # Use non-GUI backend to avoid threading issues with Flask
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.tri as mtri
