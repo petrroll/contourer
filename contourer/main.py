@@ -294,14 +294,31 @@ def export_contours_txt(
 ) -> None:
     """Export contour lines to text file.
     
-    Format: z_value: x1,y1; x2,y2; ...
+    Format:
+        z: elevation
+        x, y
+        x, y
+        ...
+        
+        z: elevation
+        x, y
+        ...
+    
+    Each contour segment starts with 'z:' line followed by coordinate lines.
+    Segments are separated by empty lines.
     """
     with open(output_path, 'w') as f:
+        first_segment = True
         for z_level in sorted(contours.keys()):
             segments = contours[z_level]
             for segment in segments:
-                coords_str = "; ".join(f"{x:.3f},{y:.3f}" for x, y in segment)
-                f.write(f"{z_level:.3f}: {coords_str}\n")
+                if not first_segment:
+                    f.write("\n")  # Empty line between segments
+                first_segment = False
+                
+                f.write(f"z: {z_level:.3f}\n")
+                for x, y in segment:
+                    f.write(f"{x:.3f}, {y:.3f}\n")
     
     print(f"Contour lines exported to: {output_path}")
 
@@ -369,11 +386,6 @@ def main():
         type=float,
         default=None,
         help="Max triangle edge length filter (default: 1.5× median)"
-    )
-    parser.add_argument(
-        "--plot",
-        action="store_true",
-        help="Generate visualization PDF"
     )
     parser.add_argument(
         "--show-points",
@@ -457,15 +469,14 @@ def main():
     total_segments = sum(len(segs) for segs in contours.values())
     print(f"Generated {total_segments} contour segments across {len(levels)} levels")
     
-    # Export contours in both formats
+    # Export contours in all three formats
     export_contours_txt(contours, contour_output_path)
     geojson_path = contour_output_path.with_suffix('.geojson')
     export_contours_geojson(contours, geojson_path)
     
-    # Create visualization if requested
-    if args.plot:
-        print("\nCreating visualization...")
-        create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
+    # Create visualization PDF
+    print("\nCreating visualization...")
+    create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
     
     print("\nDone!")
     return 0

@@ -13,9 +13,9 @@ uv run contourer data/zakazka-body.txt [options]
 Output files are automatically named based on the input filename and saved to `./data/out/`:
 - `<inputFileName>_contour.txt` - Contour line data in custom text format
 - `<inputFileName>_contour.geojson` - Contour line data in GeoJSON format
-- `<inputFileName>_map.pdf` - Visualization (when `--plot` is used)
+- `<inputFileName>_map.pdf` - Visualization PDF
 
-Both `.txt` and `.json` formats are always exported together.
+All three formats are always exported together.
 
 ### Options
 
@@ -25,7 +25,6 @@ Both `.txt` and `.json` formats are always exported together.
 | `--minor-interval 0.2` | Interval for minor contour lines (overrides --levels) |
 | `--major-interval 1.0` | Interval for major contour lines (visualization only, defaults to 5× minor) |
 | `--max-distance 5.0` | Max triangle edge length filter (default: 1.5× median) |
-| `--plot` | Generate visualization PDF |
 | `--show-points` | Show original data points on the visualization |
 | `--web` | Launch interactive browser-based viewer |
 | `--port 5000` | Port for web server (default: 5000) |
@@ -33,14 +32,14 @@ Both `.txt` and `.json` formats are always exported together.
 ### Examples
 
 ```bash
-# Auto levels with visualization
-uv run contourer data/zakazka-body.txt --plot
+# Auto levels (generates .txt, .geojson, and .pdf)
+uv run contourer data/zakazka-body.txt
 
 # Major and minor contours at 0.2 and 1 meter
-uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1 --plot
+uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1
 
 # Show original data points on the map
-uv run contourer data/zakazka-body.txt --plot --show-points
+uv run contourer data/zakazka-body.txt --show-points
 
 # Custom levels
 uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500
@@ -92,7 +91,8 @@ Space-separated: `ID X Y Z` (columns 2-4 used)
 
 ## Output Formats
 
-Both formats are always exported together:
+All three formats are always exported together:
 
 - **txt**: `z_value: x1,y1; x2,y2; ...` per segment (custom format)
-- **json**: GeoJSON FeatureCollection with LineString geometries
+- **geojson**: GeoJSON FeatureCollection with LineString geometries
+- **pdf**: Visualization map with contour lines
