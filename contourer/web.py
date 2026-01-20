@@ -292,9 +292,9 @@ def run_web_server(
         initial_show_points=show_points,
     )
     
-    print(f"\n🗺️  Contour Viewer starting...")
-    print(f"📂 Data file: {file_path}")
-    print(f"🌐 Open in browser: http://{host}:{port}")
+    print(f"\nContour Viewer starting...")
+    print(f"Data file: {file_path}")
+    print(f"Open in browser: http://{host}:{port}")
     print(f"\nPress Ctrl+C to stop the server.\n")
     
     app.run(host=host, port=port, debug=False)
