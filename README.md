@@ -10,11 +10,11 @@ uv run contourer data/zakazka-body.txt [options]
 
 ### Output Files
 
-Output files are automatically named based on the input filename and saved to `./data/out/`:
-- `<inputFileName>_contour.txt` - Contour line data in custom text format
+Output files are automatically named based on the input filename and saved to the same directory as the input file:
+- `<inputFileName>_contour.vrs` - Contour line data in custom text format
 - `<inputFileName>_contour.geojson` - Contour line data in GeoJSON format
 - `<inputFileName>_contour.dxf` - Contour line data in DXF format (for AutoCAD/CAD software)
-- `<inputFileName>_map.pdf` - Visualization PDF
+- `<inputFileName>_contour.pdf` - Visualization PDF
 
 By default, all formats are exported. Use `--formats` to select specific formats.
 
@@ -26,7 +26,7 @@ By default, all formats are exported. Use `--formats` to select specific formats
 | `--minor-interval 0.2` | Interval for minor contour lines (overrides --levels) |
 | `--major-interval 1.0` | Interval for major contour lines (visualization only, defaults to 5× minor) |
 | `--max-distance 5.0` | Max triangle edge length filter (default: 1.5× median) |
-| `--formats pdf,txt,...` | Comma-separated export formats: pdf, txt, geojson, dxf (default: all) |
+| `--formats pdf,vrs,...` | Comma-separated export formats: pdf, vrs, geojson, dxf (default: all) |
 | `--show-points` | Show original data points on the visualization |
 | `--web` | Launch interactive browser-based viewer |
 | `--port 5000` | Port for web server (default: 5000) |
@@ -34,7 +34,7 @@ By default, all formats are exported. Use `--formats` to select specific formats
 ### Examples
 
 ```bash
-# Auto levels (generates all formats: .txt, .geojson, .dxf, and .pdf)
+# Auto levels (generates all formats: .vrs, .geojson, .dxf, and .pdf)
 uv run contourer data/zakazka-body.txt
 
 # Export only specific formats
@@ -106,7 +106,7 @@ By default, all formats are exported. Use `--formats` to select specific ones:
 uv run contourer data/zakazka-body.txt --formats pdf,dxf
 ```
 
-- **txt**: `z: elevation` followed by `x, y` coordinates per segment (custom format)
+- **vrs**: `z: elevation` followed by `x, y` coordinates per segment (custom format)
 - **geojson**: GeoJSON FeatureCollection with LineString geometries
 - **dxf**: AutoCAD DXF format with contour lines as 3D polylines, organized by layer:
   - Each elevation level has its own layer (e.g., `CONTOUR_496_50`)

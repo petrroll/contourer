@@ -509,7 +509,7 @@ def main():
         "--formats",
         type=str,
         default=None,
-        help="Comma-separated list of export formats: pdf,txt,geojson,dxf (default: all)"
+        help="Comma-separated list of export formats: pdf,vrs,geojson,dxf (default: all)"
     )
     
     args = parser.parse_args()
@@ -532,12 +532,11 @@ def main():
         )
         return 0
     
-    # Derive output paths from input filename
+    # Derive output paths from input filename (output to same directory as input)
     input_stem = args.file_path.stem
-    output_dir = Path("./data/out")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    contour_output_path = output_dir / f"{input_stem}_contour.txt"
-    map_output_path = output_dir / f"{input_stem}_map.pdf"
+    output_dir = args.file_path.parent
+    contour_output_path = output_dir / f"{input_stem}_contour.vrs"
+    map_output_path = output_dir / f"{input_stem}_contour.pdf"
     
     print(f"Loading point cloud: {args.file_path}")
     
@@ -578,7 +577,7 @@ def main():
     print(f"Generated {total_segments} contour segments across {len(levels)} levels")
     
     # Determine which formats to export
-    all_formats = {'pdf', 'txt', 'geojson', 'dxf'}
+    all_formats = {'pdf', 'vrs', 'geojson', 'dxf'}
     if args.formats:
         selected_formats = set(f.strip().lower() for f in args.formats.split(','))
         invalid_formats = selected_formats - all_formats
@@ -594,7 +593,7 @@ def main():
     print(f"\nExporting formats: {', '.join(sorted(selected_formats))}")
     
     # Export contours in selected formats
-    if 'txt' in selected_formats:
+    if 'vrs' in selected_formats:
         export_contours_txt(contours, contour_output_path)
     if 'geojson' in selected_formats:
         geojson_path = contour_output_path.with_suffix('.geojson')
