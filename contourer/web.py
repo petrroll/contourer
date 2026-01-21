@@ -14,6 +14,7 @@ from .main import (
     extract_contour_paths,
     generate_auto_levels,
     generate_interval_levels,
+    get_output_paths,
     export_contours_txt,
     export_contours_geojson,
     export_contours_dxf,
@@ -237,26 +238,20 @@ def create_app(
         # Extract contours
         contours = extract_contour_paths(triangulation, points[:, 2], levels)
         
-        # Derive output paths from input filename (same as CLI)
-        input_stem = file_path.stem
-        output_dir = Path("./data/out")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        contour_output_path = output_dir / f"{input_stem}_contour.txt"
-        map_output_path = output_dir / f"{input_stem}_map.pdf"
+        # Get output paths (same directory as input file)
+        output_paths = get_output_paths(file_path)
         
         # Export contours in all formats
-        export_contours_txt(contours, contour_output_path)
-        geojson_path = contour_output_path.with_suffix('.geojson')
-        export_contours_geojson(contours, geojson_path)
-        dxf_path = contour_output_path.with_suffix('.dxf')
-        export_contours_dxf(contours, dxf_path, major_levels)
+        export_contours_txt(contours, output_paths['vrs'])
+        export_contours_geojson(contours, output_paths['geojson'])
+        export_contours_dxf(contours, output_paths['dxf'], major_levels)
         
         # Create visualization PDF using existing function
         create_visualization(
             triangulation, 
             points[:, 2], 
             levels, 
-            map_output_path, 
+            output_paths['pdf'], 
             major_levels, 
             show_points
         )
@@ -264,10 +259,10 @@ def create_app(
         return jsonify({
             "success": True,
             "files": {
-                "txt": str(contour_output_path),
-                "geojson": str(geojson_path),
-                "dxf": str(dxf_path),
-                "pdf": str(map_output_path)
+                "vrs": str(output_paths['vrs']),
+                "geojson": str(output_paths['geojson']),
+                "dxf": str(output_paths['dxf']),
+                "pdf": str(output_paths['pdf'])
             }
         })
     

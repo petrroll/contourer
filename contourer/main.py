@@ -290,6 +290,29 @@ def create_visualization(
     print(f"\nVisualization saved to: {output_path}")
 
 
+def get_output_paths(input_file: Path) -> dict[str, Path]:
+    """Generate output file paths based on input file.
+    
+    Output files are placed in the same directory as the input file.
+    
+    Args:
+        input_file: Path to the input data file
+        
+    Returns:
+        Dictionary with keys 'vrs', 'geojson', 'dxf', 'pdf' and their output paths
+    """
+    input_stem = input_file.stem
+    output_dir = input_file.parent
+    base_path = output_dir / f"{input_stem}_contour"
+    
+    return {
+        'vrs': base_path.with_suffix('.vrs'),
+        'geojson': base_path.with_suffix('.geojson'),
+        'dxf': base_path.with_suffix('.dxf'),
+        'pdf': base_path.with_suffix('.pdf'),
+    }
+
+
 def export_contours_txt(
     contours: dict[float, list[list[tuple[float, float]]]], 
     output_path: Path
@@ -532,11 +555,8 @@ def main():
         )
         return 0
     
-    # Derive output paths from input filename (output to same directory as input)
-    input_stem = args.file_path.stem
-    output_dir = args.file_path.parent
-    contour_output_path = output_dir / f"{input_stem}_contour.vrs"
-    map_output_path = output_dir / f"{input_stem}_contour.pdf"
+    # Get output paths (same directory as input file)
+    output_paths = get_output_paths(args.file_path)
     
     print(f"Loading point cloud: {args.file_path}")
     
@@ -594,18 +614,16 @@ def main():
     
     # Export contours in selected formats
     if 'vrs' in selected_formats:
-        export_contours_txt(contours, contour_output_path)
+        export_contours_txt(contours, output_paths['vrs'])
     if 'geojson' in selected_formats:
-        geojson_path = contour_output_path.with_suffix('.geojson')
-        export_contours_geojson(contours, geojson_path)
+        export_contours_geojson(contours, output_paths['geojson'])
     if 'dxf' in selected_formats:
-        dxf_path = contour_output_path.with_suffix('.dxf')
-        export_contours_dxf(contours, dxf_path, major_levels)
+        export_contours_dxf(contours, output_paths['dxf'], major_levels)
     
     # Create visualization PDF
     if 'pdf' in selected_formats:
         print("\nCreating visualization...")
-        create_visualization(triangulation, points[:, 2], levels, map_output_path, major_levels, args.show_points)
+        create_visualization(triangulation, points[:, 2], levels, output_paths['pdf'], major_levels, args.show_points)
     
     print("\nDone!")
     return 0
