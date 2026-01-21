@@ -14,11 +14,7 @@ from .main import (
     extract_contour_paths,
     generate_auto_levels,
     generate_interval_levels,
-    get_output_paths,
-    export_contours_txt,
-    export_contours_geojson,
-    export_contours_dxf,
-    create_visualization,
+    run_export,
 )
 
 
@@ -213,7 +209,7 @@ def create_app(
     
     @app.route('/api/export')
     def export_files():
-        """Export contour lines and map to ./data/out folder, just like CLI."""
+        """Export contour lines and map, using the same logic as CLI."""
         points, z_stats = get_cached_data()
         
         # Get parameters from request
@@ -226,44 +222,21 @@ def create_app(
         # Get triangulation
         triangulation = get_triangulation(max_distance)
         
-        # Generate levels
-        major_levels = None
-        if minor_interval:
-            levels, major_levels = generate_interval_levels(
-                z_stats, minor_interval, major_interval
-            )
-        else:
-            levels = generate_auto_levels(z_stats, num_levels)
-        
-        # Extract contours
-        contours = extract_contour_paths(triangulation, points[:, 2], levels)
-        
-        # Get output paths (same directory as input file)
-        output_paths = get_output_paths(file_path)
-        
-        # Export contours in all formats
-        export_contours_txt(contours, output_paths['vrs'])
-        export_contours_geojson(contours, output_paths['geojson'])
-        export_contours_dxf(contours, output_paths['dxf'], major_levels)
-        
-        # Create visualization PDF using existing function
-        create_visualization(
-            triangulation, 
-            points[:, 2], 
-            levels, 
-            output_paths['pdf'], 
-            major_levels, 
-            show_points
+        # Run the shared export workflow
+        exported_paths = run_export(
+            file_path=file_path,
+            points=points,
+            z_stats=z_stats,
+            triangulation=triangulation,
+            minor_interval=minor_interval,
+            major_interval=major_interval,
+            num_levels=num_levels,
+            show_points=show_points,
         )
         
         return jsonify({
             "success": True,
-            "files": {
-                "vrs": str(output_paths['vrs']),
-                "geojson": str(output_paths['geojson']),
-                "dxf": str(output_paths['dxf']),
-                "pdf": str(output_paths['pdf'])
-            }
+            "files": {fmt: str(path) for fmt, path in exported_paths.items()}
         })
     
     return app

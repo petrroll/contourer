@@ -481,6 +481,78 @@ def export_contours_dxf(
         print(f"  - {len(major_set)} major contour levels")
 
 
+def run_export(
+    file_path: Path,
+    points: np.ndarray,
+    z_stats: dict,
+    triangulation: mtri.Triangulation,
+    minor_interval: Optional[float] = None,
+    major_interval: Optional[float] = None,
+    num_levels: int = 30,
+    show_points: bool = False,
+    formats: Optional[set[str]] = None,
+) -> dict[str, Path]:
+    """Run the full export workflow for contour generation.
+    
+    This is the shared export logic used by both CLI and web interface.
+    
+    Args:
+        file_path: Input file path (used to derive output paths)
+        points: Point cloud data (N, 3) array
+        z_stats: Z statistics dictionary from print_z_statistics
+        triangulation: Pre-computed triangulation
+        minor_interval: Interval for minor contour lines
+        major_interval: Interval for major contour lines
+        num_levels: Number of auto-generated levels (if no interval specified)
+        show_points: Whether to show points on PDF visualization
+        formats: Set of formats to export ('vrs', 'geojson', 'dxf', 'pdf'), or None for all
+    
+    Returns:
+        Dictionary mapping format names to their output paths
+    """
+    # Determine which formats to export
+    all_formats = {'pdf', 'vrs', 'geojson', 'dxf'}
+    selected_formats = formats if formats else all_formats
+    
+    # Generate levels
+    major_levels = None
+    if minor_interval:
+        print(f"Using interval-based levels (minor: {minor_interval}, major: {major_interval or 'auto'})")
+        levels, major_levels = generate_interval_levels(
+            z_stats, minor_interval, major_interval
+        )
+    else:
+        levels = generate_auto_levels(z_stats, num_levels)
+    
+    # Extract contour paths
+    print("Generating contour lines...")
+    contours = extract_contour_paths(triangulation, points[:, 2], levels)
+    
+    total_segments = sum(len(segs) for segs in contours.values())
+    print(f"Generated {total_segments} contour segments across {len(levels)} levels")
+    
+    # Get output paths
+    output_paths = get_output_paths(file_path)
+    
+    print(f"Exporting formats: {', '.join(sorted(selected_formats))}")
+    
+    # Export contours in selected formats
+    if 'vrs' in selected_formats:
+        export_contours_txt(contours, output_paths['vrs'])
+    if 'geojson' in selected_formats:
+        export_contours_geojson(contours, output_paths['geojson'])
+    if 'dxf' in selected_formats:
+        export_contours_dxf(contours, output_paths['dxf'], major_levels)
+    
+    # Create visualization PDF
+    if 'pdf' in selected_formats:
+        print("Creating visualization...")
+        create_visualization(triangulation, points[:, 2], levels, output_paths['pdf'], major_levels, show_points)
+    
+    # Return only the paths that were actually exported
+    return {fmt: output_paths[fmt] for fmt in selected_formats}
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate contour lines from point cloud terrain data"
@@ -571,31 +643,6 @@ def main():
     print("\nCreating triangulation...")
     triangulation, mask = create_triangulation_with_filter(points, args.max_distance)
     
-    # Determine contour levels
-    major_levels = None  # Track major levels for visualization
-    
-    if args.minor_interval:
-        # Use interval-based level generation
-        print(f"\nUsing interval-based levels (minor: {args.minor_interval}, major: {args.major_interval or 'auto'})")
-        levels, major_levels = generate_interval_levels(
-            z_stats, 
-            args.minor_interval, 
-            args.major_interval
-        )
-    elif args.levels:
-        levels = args.levels
-        print(f"\nUsing custom levels: {levels}")
-    else:
-        levels = generate_auto_levels(z_stats)
-        print(f"\nAuto-generated levels: {[f'{l:.2f}' for l in levels]}")
-    
-    # Extract contour paths
-    print("\nGenerating contour lines...")
-    contours = extract_contour_paths(triangulation, points[:, 2], levels)
-    
-    total_segments = sum(len(segs) for segs in contours.values())
-    print(f"Generated {total_segments} contour segments across {len(levels)} levels")
-    
     # Determine which formats to export
     all_formats = {'pdf', 'vrs', 'geojson', 'dxf'}
     if args.formats:
@@ -610,20 +657,17 @@ def main():
     else:
         selected_formats = all_formats
     
-    print(f"\nExporting formats: {', '.join(sorted(selected_formats))}")
-    
-    # Export contours in selected formats
-    if 'vrs' in selected_formats:
-        export_contours_txt(contours, output_paths['vrs'])
-    if 'geojson' in selected_formats:
-        export_contours_geojson(contours, output_paths['geojson'])
-    if 'dxf' in selected_formats:
-        export_contours_dxf(contours, output_paths['dxf'], major_levels)
-    
-    # Create visualization PDF
-    if 'pdf' in selected_formats:
-        print("\nCreating visualization...")
-        create_visualization(triangulation, points[:, 2], levels, output_paths['pdf'], major_levels, args.show_points)
+    # Run the export workflow
+    run_export(
+        file_path=args.file_path,
+        points=points,
+        z_stats=z_stats,
+        triangulation=triangulation,
+        minor_interval=args.minor_interval,
+        major_interval=args.major_interval,
+        show_points=args.show_points,
+        formats=selected_formats,
+    )
     
     print("\nDone!")
     return 0
