@@ -645,7 +645,7 @@
                     <svg viewBox="0 0 24 24" class="export-icon">
                         <path d="M5,20H19V18H5M19,9H15V3H9V9H5L12,16L19,9Z"/>
                     </svg>
-                    <span data-i18n="exportFiles">Export to ./data/out</span>
+                    <span data-i18n="exportFiles">Export Files</span>
                 </button>
                 <div id="export-result" class="export-result" style="display: none;"></div>
             </div>
@@ -727,9 +727,9 @@
                 commandLine: 'Command Line',
                 copied: 'Copied!',
                 exportData: 'Export Data',
-                exportFiles: 'Export to ./data/out',
+                exportFiles: 'Export Files',
                 exporting: 'Exporting...',
-                exportSuccess: 'Exported: {txt} and {pdf}',
+                exportSuccess: 'Exported: {vrs} and {pdf}',
                 exportError: 'Export failed: {message}',
                 view2D: '2D Map',
                 view3D: '3D View',
@@ -781,9 +781,9 @@
                 commandLine: 'Příkazový řádek',
                 copied: 'Zkopírováno!',
                 exportData: 'Export dat',
-                exportFiles: 'Exportovat do ./data/out',
+                exportFiles: 'Exportovat soubory',
                 exporting: 'Exportování...',
-                exportSuccess: 'Exportováno: {txt} a {pdf}',
+                exportSuccess: 'Exportováno: {vrs} a {pdf}',
                 exportError: 'Export selhal: {message}',
                 view2D: '2D Mapa',
                 view3D: '3D Pohled',
@@ -1167,7 +1167,7 @@
             return `/api/export?${params.toString()}`;
         }
         
-        // Export data to ./data/out folder
+        // Export data to same directory as input file
         async function exportFiles() {
             const btn = document.getElementById('export-btn');
             const resultDiv = document.getElementById('export-result');
@@ -1188,7 +1188,7 @@
                 
                 // Show success message with file paths
                 resultDiv.textContent = t('exportSuccess', { 
-                    txt: data.files.txt, 
+                    vrs: data.files.vrs, 
                     pdf: data.files.pdf 
                 });
                 resultDiv.className = 'export-result success';
