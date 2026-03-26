@@ -510,9 +510,47 @@
                 <h2 data-i18n="dataInfo">Data Info</h2>
                 <div class="stats">
                     <div class="stats-row">
-                        <span class="stats-label" data-i18n="points">Points</span>
+                        <span class="stats-label" data-i18n="totalLines">Total Lines</span>
+                        <span class="stats-value">{{ load_summary.total_lines }}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="loadedPoints">Loaded Points</span>
                         <span class="stats-value">{{ num_points }}</span>
                     </div>
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="skippedLines">Skipped Lines</span>
+                        <span class="stats-value">{{ load_summary.skipped_lines }}</span>
+                    </div>
+                    {% if load_summary.decimal_comma_fixed_lines %}
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="decimalCommaFixed">Decimal Comma Fixed</span>
+                        <span class="stats-value">{{ load_summary.decimal_comma_fixed_lines }}</span>
+                    </div>
+                    {% endif %}
+                    {% if load_summary.blank_lines %}
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="blankLines">Blank Lines</span>
+                        <span class="stats-value">{{ load_summary.blank_lines }}</span>
+                    </div>
+                    {% endif %}
+                    {% if load_summary.incomplete_lines %}
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="incompleteLines">Incomplete Lines</span>
+                        <span class="stats-value">{{ load_summary.incomplete_lines }}</span>
+                    </div>
+                    {% endif %}
+                    {% if load_summary.invalid_number_lines %}
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="invalidNumberLines">Invalid Numeric Lines</span>
+                        <span class="stats-value">{{ load_summary.invalid_number_lines }}</span>
+                    </div>
+                    {% endif %}
+                    {% if load_summary.positive_xy_lines %}
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="positiveXYLines">Positive X/Y Skipped</span>
+                        <span class="stats-value">{{ load_summary.positive_xy_lines }}</span>
+                    </div>
+                    {% endif %}
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="zMin">Z Min</span>
                         <span class="stats-value">{{ "%.2f"|format(z_min) }}</span>
@@ -694,7 +732,14 @@
                 appTitle: 'Contour Viewer',
                 language: 'Language',
                 dataInfo: 'Data Info',
-                points: 'Points',
+                totalLines: 'Total Lines',
+                loadedPoints: 'Loaded Points',
+                skippedLines: 'Skipped Lines',
+                decimalCommaFixed: 'Decimal Comma Fixed',
+                blankLines: 'Blank Lines',
+                incompleteLines: 'Incomplete Lines',
+                invalidNumberLines: 'Invalid Numeric Lines',
+                positiveXYLines: 'Positive X/Y Skipped',
                 zMin: 'Z Min',
                 zMax: 'Z Max',
                 contourSettings: 'Contour Settings',
@@ -748,7 +793,14 @@
                 appTitle: 'Prohlížeč vrstevnic',
                 language: 'Jazyk',
                 dataInfo: 'Informace o datech',
-                points: 'Body',
+                totalLines: 'Řádků celkem',
+                loadedPoints: 'Načtené body',
+                skippedLines: 'Přeskočené řádky',
+                decimalCommaFixed: 'Řádky s opravenou čárkou',
+                blankLines: 'Prázdné řádky',
+                incompleteLines: 'Neúplné řádky',
+                invalidNumberLines: 'Řádky s neplatným číslem',
+                positiveXYLines: 'Přeskočené kladné X/Y',
                 zMin: 'Z Min',
                 zMax: 'Z Max',
                 contourSettings: 'Nastavení vrstevnic',

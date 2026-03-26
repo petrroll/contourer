@@ -97,6 +97,14 @@ Switch to the 3D view by clicking the **3D View** tab in the sidebar. The 3D vie
 
 Space-separated: `ID X Y Z` (columns 2-4 used)
 
+The loader is tolerant to common bad rows:
+- empty lines are skipped
+- incomplete rows are skipped
+- values with decimal comma are normalized and loaded when possible
+- rows where both `X` and `Y` are positive are skipped
+
+During CLI and web loading, the app reports how many rows were loaded and skipped, including a brief breakdown of skip reasons.
+
 ## Output Formats
 
 By default, all formats are exported. Use `--formats` to select specific ones:

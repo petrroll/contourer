@@ -9,6 +9,7 @@ from flask import Flask, render_template, jsonify, request
 
 from .main import (
     load_point_cloud,
+    print_load_summary,
     print_z_statistics,
     create_triangulation_with_filter,
     extract_contour_paths,
@@ -45,14 +46,16 @@ def create_app(
         cache = app.config['CACHE']
         if 'points' not in cache:
             print(f"Loading point cloud: {file_path}")
-            points = load_point_cloud(file_path)
-            print(f"Loaded {len(points)} points")
-            
+            load_result = load_point_cloud(file_path)
+            points = load_result.points
+            print_load_summary(load_result.summary)
+
             z_stats = print_z_statistics(points[:, 2])
-            
+
             cache['points'] = points
             cache['z_stats'] = z_stats
-        return cache['points'], cache['z_stats']
+            cache['load_summary'] = load_result.summary
+        return cache['points'], cache['z_stats'], cache['load_summary']
     
     def get_triangulation(max_distance: Optional[float] = None):
         """Get or create triangulation with given max_distance."""
@@ -60,7 +63,7 @@ def create_app(
         cache_key = f'triangulation_{max_distance}'
         
         if cache_key not in cache:
-            points, _ = get_cached_data()
+            points, _, _ = get_cached_data()
             print(f"Creating triangulation (max_distance={max_distance})...")
             triangulation, mask = create_triangulation_with_filter(points, max_distance)
             cache[cache_key] = triangulation
@@ -70,7 +73,7 @@ def create_app(
     @app.route('/')
     def index():
         """Render the main map view."""
-        points, z_stats = get_cached_data()
+        points, z_stats, load_summary = get_cached_data()
         initial = app.config['INITIAL_SETTINGS']
         return render_template('map.html', 
                                filename=file_path.name,
@@ -80,12 +83,13 @@ def create_app(
                                initial_major_interval=initial['major_interval'],
                                initial_max_distance=initial['max_distance'],
                                initial_show_points=initial['show_points'],
-                               num_points=len(points))
+                               num_points=len(points),
+                               load_summary=load_summary)
     
     @app.route('/api/bounds')
     def get_bounds():
         """Get the bounding box of the data."""
-        points, z_stats = get_cached_data()
+        points, z_stats, _ = get_cached_data()
         x, y = points[:, 0], points[:, 1]
         return jsonify({
             'x_min': float(np.min(x)),
@@ -99,7 +103,7 @@ def create_app(
     @app.route('/api/points')
     def get_points():
         """Get all points as GeoJSON."""
-        points, _ = get_cached_data()
+        points, _, _ = get_cached_data()
         
         features = []
         for i, (x, y, z) in enumerate(points):
@@ -120,7 +124,7 @@ def create_app(
     @app.route('/api/contours')
     def get_contours():
         """Generate and return contour lines as GeoJSON."""
-        points, z_stats = get_cached_data()
+        points, z_stats, _ = get_cached_data()
         
         # Get parameters from request
         minor_interval = request.args.get('minor_interval', type=float)
@@ -180,7 +184,7 @@ def create_app(
     @app.route('/api/mesh')
     def get_mesh():
         """Get the triangulated mesh data for 3D visualization."""
-        points, z_stats = get_cached_data()
+        points, z_stats, _ = get_cached_data()
         
         # Get parameters from request
         max_distance = request.args.get('max_distance', type=float)
@@ -210,7 +214,7 @@ def create_app(
     @app.route('/api/export')
     def export_files():
         """Export contour lines and map, using the same logic as CLI."""
-        points, z_stats = get_cached_data()
+        points, z_stats, _ = get_cached_data()
         
         # Get parameters from request
         minor_interval = request.args.get('minor_interval', type=float)

@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Optional
@@ -14,27 +15,133 @@ import numpy as np
 from scipy.spatial import Delaunay
 
 
-def load_point_cloud(filepath: Path) -> np.ndarray:
-    """Load point cloud data from file.
-    
-    File format: Either X Y Z (3 columns) or ID X Y Z (4 columns), space-separated.
-    Returns (N, 3) array with X, Y, Z columns.
+@dataclass(frozen=True)
+class PointCloudLoadSummary:
+    total_lines: int
+    loaded_points: int
+    skipped_lines: int
+    blank_lines: int
+    incomplete_lines: int
+    invalid_number_lines: int
+    positive_xy_lines: int
+    decimal_comma_fixed_lines: int
+
+
+@dataclass(frozen=True)
+class PointCloudLoadResult:
+    points: np.ndarray
+    summary: PointCloudLoadSummary
+
+
+def _parse_point_line(line: str) -> tuple[Optional[tuple[float, float, float]], str, bool]:
+    """Parse a single point-cloud line.
+
+    Accepts either `X Y Z` or `ID X Y Z` style rows.
     """
-    # First, detect number of columns
-    with open(filepath) as f:
-        first_line = f.readline().strip()
-    num_cols = len(first_line.split())
-    
-    if num_cols == 3:
-        # X Y Z format
-        data = np.loadtxt(filepath, usecols=(0, 1, 2))
-    elif num_cols >= 4:
-        # ID X Y Z format (ignore ID)
-        data = np.loadtxt(filepath, usecols=(1, 2, 3))
-    else:
-        raise ValueError(f"Expected 3 or 4 columns, got {num_cols}")
-    
-    return data
+    stripped = line.strip()
+    if not stripped:
+        return None, 'blank', False
+
+    columns = stripped.split()
+    if len(columns) < 3:
+        return None, 'incomplete', False
+
+    value_columns = columns[:3] if len(columns) == 3 else columns[1:4]
+
+    normalized_columns = []
+    decimal_comma_fixed = False
+    for token in value_columns:
+        normalized_token = token
+        if ',' in token and '.' not in token:
+            normalized_token = token.replace(',', '.')
+            decimal_comma_fixed = True
+        normalized_columns.append(normalized_token)
+
+    try:
+        x, y, z = (float(token) for token in normalized_columns)
+    except ValueError:
+        return None, 'invalid_number', decimal_comma_fixed
+
+    if x > 0 and y > 0:
+        return None, 'positive_xy', decimal_comma_fixed
+
+    return (x, y, z), 'loaded', decimal_comma_fixed
+
+
+def print_load_summary(summary: PointCloudLoadSummary) -> None:
+    """Print a short summary of what was loaded and skipped."""
+    print("\nInput summary:")
+    print(f"  Total lines:            {summary.total_lines}")
+    print(f"  Loaded points:          {summary.loaded_points}")
+    print(f"  Skipped lines:          {summary.skipped_lines}")
+
+    if summary.decimal_comma_fixed_lines:
+        print(f"  Decimal comma fixed:    {summary.decimal_comma_fixed_lines}")
+    if summary.blank_lines:
+        print(f"  Blank lines:            {summary.blank_lines}")
+    if summary.incomplete_lines:
+        print(f"  Incomplete lines:       {summary.incomplete_lines}")
+    if summary.invalid_number_lines:
+        print(f"  Invalid numeric lines:  {summary.invalid_number_lines}")
+    if summary.positive_xy_lines:
+        print(f"  Positive X/Y skipped:   {summary.positive_xy_lines}")
+
+
+def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
+    """Load point cloud data from file.
+
+    File format: Either X Y Z (3 columns) or ID X Y Z (4 columns), space-separated.
+    Empty, incomplete, malformed, or obviously invalid rows are skipped.
+    Decimal commas in numeric values are normalized to dots when possible.
+    """
+    points = []
+    total_lines = 0
+    blank_lines = 0
+    incomplete_lines = 0
+    invalid_number_lines = 0
+    positive_xy_lines = 0
+    decimal_comma_fixed_lines = 0
+
+    with open(filepath, encoding='utf-8') as handle:
+        for line in handle:
+            total_lines += 1
+            point, status, decimal_comma_fixed = _parse_point_line(line)
+
+            if decimal_comma_fixed:
+                decimal_comma_fixed_lines += 1
+
+            if status == 'loaded':
+                points.append(point)
+                continue
+
+            if status == 'blank':
+                blank_lines += 1
+            elif status == 'incomplete':
+                incomplete_lines += 1
+            elif status == 'invalid_number':
+                invalid_number_lines += 1
+            elif status == 'positive_xy':
+                positive_xy_lines += 1
+
+    data = np.asarray(points, dtype=float) if points else np.empty((0, 3), dtype=float)
+
+    summary = PointCloudLoadSummary(
+        total_lines=total_lines,
+        loaded_points=len(data),
+        skipped_lines=total_lines - len(data),
+        blank_lines=blank_lines,
+        incomplete_lines=incomplete_lines,
+        invalid_number_lines=invalid_number_lines,
+        positive_xy_lines=positive_xy_lines,
+        decimal_comma_fixed_lines=decimal_comma_fixed_lines,
+    )
+
+    if len(data) < 3:
+        raise ValueError(
+            f"Loaded only {len(data)} valid points from '{filepath}'. Need at least 3 valid points."
+        )
+
+    return PointCloudLoadResult(points=data, summary=summary)
 
 
 def compute_triangle_edge_lengths(points_xy: np.ndarray, triangles: np.ndarray) -> np.ndarray:
@@ -631,10 +738,11 @@ def main():
     output_paths = get_output_paths(args.file_path)
     
     print(f"Loading point cloud: {args.file_path}")
-    
+
     # Load point cloud data
-    points = load_point_cloud(args.file_path)
-    print(f"Loaded {len(points)} points")
+    load_result = load_point_cloud(args.file_path)
+    points = load_result.points
+    print_load_summary(load_result.summary)
     
     # Print Z statistics
     z_stats = print_z_statistics(points[:, 2])
