@@ -108,6 +108,10 @@ If your input coordinates are already in a known CRS, you can switch the 2D view
 uv run contourer data/zakazka-body.txt --web --basemap osm --source-crs EPSG:2065 --source-axis-order yx
 ```
 
+Example with OpenStreetMap enabled for source data in a defined projected CRS:
+
+<img src="docs/image.png" alt="Web viewer with OpenStreetMap underlay using a defined source projection" width="600">
+
 - `--source-crs EPSG:4326` is appropriate when the input file already contains longitude/latitude.
 - Projected CRS values such as `EPSG:2065` also work, as long as the input coordinates are in that CRS.
 - If the source file stores projected coordinates in `Y X Z` order, use `--source-axis-order yx`.
