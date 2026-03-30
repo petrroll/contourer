@@ -1,5 +1,6 @@
 import argparse
 from dataclasses import dataclass
+import importlib
 import json
 from pathlib import Path
 import re
@@ -14,6 +15,8 @@ import matplotlib.ticker as mticker
 import matplotlib.tri as mtri
 import numpy as np
 from scipy.spatial import Delaunay
+
+mpl_cpp_tri = importlib.import_module('matplotlib._tri')
 
 
 @dataclass(frozen=True)
@@ -577,6 +580,23 @@ def extract_contour_paths(
     Returns dict mapping Z level to list of contour segments.
     Each segment is a list of (x, y) coordinate tuples.
     """
+    if hasattr(mpl_cpp_tri, 'TriContourGenerator'):
+        contour_generator = mpl_cpp_tri.TriContourGenerator(
+            triangulation.get_cpp_triangulation(),
+            np.asarray(z_values, dtype=float),
+        )
+
+        contours = {}
+        for level in levels:
+            vertices_by_segment, _ = contour_generator.create_contour(float(level))
+            contours[float(level)] = [
+                [(float(x), float(y)) for x, y in vertices]
+                for vertices in vertices_by_segment
+                if len(vertices) > 1
+            ]
+
+        return contours
+
     fig, ax = plt.subplots()
     contour_set = ax.tricontour(triangulation, z_values, levels=levels)
     plt.close(fig)
