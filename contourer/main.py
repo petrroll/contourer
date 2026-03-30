@@ -70,7 +70,40 @@ class AxisFilter:
         return f"{self.operator_symbol}{self.threshold:g}"
 
 
+@dataclass(frozen=True)
+class MapDisplaySettings:
+    basemap: str
+    source_crs: Optional[str]
+    source_axis_order: str = 'xy'
+
+    @property
+    def uses_geographic_coordinates(self) -> bool:
+        return self.basemap == 'osm'
+
+    @property
+    def display_crs(self) -> Optional[str]:
+        if not self.uses_geographic_coordinates:
+            return None
+        return DISPLAY_TARGET_CRS
+
+    @property
+    def coordinate_mode(self) -> str:
+        return 'geographic' if self.uses_geographic_coordinates else 'local'
+
+    @property
+    def cache_key(self) -> tuple[str, Optional[str], str, Optional[str]]:
+        return (
+            self.basemap,
+            self.source_crs if self.uses_geographic_coordinates else None,
+            self.source_axis_order if self.uses_geographic_coordinates else 'xy',
+            self.display_crs,
+        )
+
+
 AXIS_NAMES = ('X', 'Y', 'Z')
+MAP_BASEMAP_OPTIONS = ('none', 'osm')
+MAP_SOURCE_AXIS_OPTIONS = ('xy', 'yx')
+DISPLAY_TARGET_CRS = 'EPSG:4326'
 AXIS_FILTER_PATTERN = re.compile(
     r"^\s*(<=|>=|==|!=|<|>)\s*([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)\s*$"
 )
@@ -83,6 +116,129 @@ AXIS_FILTER_OPERATORS = {
     '!=': np.not_equal,
 }
 TEXT_DECODINGS = ('utf-8', 'cp1250', 'latin-1')
+
+
+def normalize_source_crs(source_crs: Optional[str]) -> Optional[str]:
+    if source_crs is None:
+        return None
+
+    stripped = source_crs.strip()
+    if not stripped:
+        return None
+
+    return stripped
+
+
+def normalize_source_axis_order(source_axis_order: Optional[str]) -> str:
+    normalized_source_axis_order = (source_axis_order or 'xy').strip().lower()
+    if normalized_source_axis_order not in MAP_SOURCE_AXIS_OPTIONS:
+        supported = ', '.join(MAP_SOURCE_AXIS_OPTIONS)
+        raise ValueError(
+            f"Unsupported source axis order '{source_axis_order}'. Choose one of: {supported}."
+        )
+
+    return normalized_source_axis_order
+
+
+def _load_pyproj_types():
+    try:
+        from pyproj import CRS, Transformer
+    except ImportError as error:
+        raise RuntimeError(
+            "pyproj is required for coordinate reprojection support. Install project dependencies first."
+        ) from error
+
+    return CRS, Transformer
+
+
+def validate_map_display_settings(
+    basemap: Optional[str],
+    source_crs: Optional[str],
+    source_axis_order: Optional[str] = 'xy',
+) -> MapDisplaySettings:
+    normalized_basemap = (basemap or 'none').strip().lower()
+    if normalized_basemap not in MAP_BASEMAP_OPTIONS:
+        supported = ', '.join(MAP_BASEMAP_OPTIONS)
+        raise ValueError(f"Unsupported basemap '{basemap}'. Choose one of: {supported}.")
+
+    normalized_source_crs = normalize_source_crs(source_crs)
+    normalized_source_axis_order = normalize_source_axis_order(source_axis_order)
+    if normalized_basemap == 'osm':
+        if normalized_source_crs is None:
+            raise ValueError(
+                "OpenStreetMap basemap requires a source CRS. Set --source-crs to a value such as EPSG:4326 or EPSG:2065."
+            )
+
+        try:
+            CRS, _ = _load_pyproj_types()
+            normalized_source_crs = CRS.from_user_input(normalized_source_crs).to_string()
+        except RuntimeError as error:
+            raise ValueError(str(error)) from error
+        except Exception as error:
+            raise ValueError(f"Invalid source CRS '{normalized_source_crs}': {error}") from error
+
+    return MapDisplaySettings(
+        basemap=normalized_basemap,
+        source_crs=normalized_source_crs,
+        source_axis_order=normalized_source_axis_order,
+    )
+
+
+def _apply_source_axis_order(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    source_axis_order: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    if source_axis_order == 'xy':
+        return x_values, y_values
+    if source_axis_order == 'yx':
+        return y_values, x_values
+    raise ValueError(f"Unsupported source axis order '{source_axis_order}'.")
+
+
+def build_display_transformer(map_display_settings: MapDisplaySettings):
+    if not map_display_settings.uses_geographic_coordinates:
+        return None
+
+    if map_display_settings.source_crs is None or map_display_settings.display_crs is None:
+        raise ValueError("Geographic display mode requires both source and target CRS values.")
+
+    _, Transformer = _load_pyproj_types()
+    return Transformer.from_crs(
+        map_display_settings.source_crs,
+        map_display_settings.display_crs,
+        always_xy=True,
+    )
+
+
+def transform_coordinates_for_display(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    map_display_settings: MapDisplaySettings,
+    transformer=None,
+) -> tuple[np.ndarray, np.ndarray]:
+    x_values = np.asarray(x_values, dtype=float)
+    y_values = np.asarray(y_values, dtype=float)
+    if x_values.shape != y_values.shape:
+        raise ValueError("X and Y coordinate arrays must have the same shape.")
+
+    if not map_display_settings.uses_geographic_coordinates:
+        return x_values, y_values
+
+    if map_display_settings.source_crs is None or map_display_settings.display_crs is None:
+        raise ValueError("Geographic display mode requires both source and target CRS values.")
+
+    source_x, source_y = _apply_source_axis_order(
+        x_values,
+        y_values,
+        map_display_settings.source_axis_order,
+    )
+
+    if transformer is None:
+        transformer = build_display_transformer(map_display_settings)
+
+    transformed_x, transformed_y = transformer.transform(source_x, source_y)
+    return np.asarray(transformed_x, dtype=float), np.asarray(transformed_y, dtype=float)
 
 
 def parse_axis_filter(expression: str, axis_name: str) -> Optional[AxisFilter]:
@@ -1051,6 +1207,24 @@ def main():
         help="Launch interactive browser-based viewer"
     )
     parser.add_argument(
+        "--basemap",
+        type=str,
+        default='none',
+        help="2D web viewer basemap: none (local coordinates) or osm (OpenStreetMap). OpenStreetMap requires --source-crs."
+    )
+    parser.add_argument(
+        "--source-crs",
+        type=str,
+        default=None,
+        help="Known source CRS for 2D web map reprojection, for example EPSG:4326 or EPSG:2065. Required when using --basemap osm."
+    )
+    parser.add_argument(
+        "--source-axis-order",
+        type=str,
+        default='xy',
+        help="Axis order for the source CRS in the input file: xy or yx. Use yx when the file stores coordinates as Y then X."
+    )
+    parser.add_argument(
         "--port",
         type=int,
         default=5000,
@@ -1067,6 +1241,15 @@ def main():
 
     try:
         axis_filters = parse_axis_filters(args.axis_filters)
+    except ValueError as error:
+        parser.error(str(error))
+
+    try:
+        map_display_settings = validate_map_display_settings(
+            args.basemap,
+            args.source_crs,
+            args.source_axis_order,
+        )
     except ValueError as error:
         parser.error(str(error))
 
@@ -1089,8 +1272,18 @@ def main():
             axis_filters=normalized_axis_filters,
             show_points=args.show_points,
             show_point_labels=args.show_point_labels,
+            basemap=map_display_settings.basemap,
+            source_crs=map_display_settings.source_crs,
+            source_axis_order=map_display_settings.source_axis_order,
         )
         return 0
+
+    if (
+        map_display_settings.basemap != 'none'
+        or map_display_settings.source_crs is not None
+        or map_display_settings.source_axis_order != 'xy'
+    ):
+        print("Note: --basemap, --source-crs, and --source-axis-order only affect the interactive web viewer.")
     
     # Get output paths (same directory as input file)
     output_paths = get_output_paths(args.file_path)

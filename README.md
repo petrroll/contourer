@@ -26,6 +26,9 @@ By default, all formats are exported. Use `--formats` to select specific formats
 | `--minor-interval 0.2` | Interval for minor contour lines (overrides --levels) |
 | `--major-interval 1.0` | Interval for major contour lines (visualization only, defaults to 5× minor) |
 | `--max-distance 5.0` | Max triangle edge length filter (default: 1.5× median) |
+| `--basemap osm` | 2D web viewer basemap. Use `none` for the current local-coordinate view or `osm` for OpenStreetMap. |
+| `--source-crs EPSG:2065` | Known source CRS for 2D web map reprojection. Required when using `--basemap osm`. |
+| `--source-axis-order yx` | Axis order of the source coordinates in the input file: `xy` or `yx`. Use `yx` when the file stores coordinates as `Y X Z`. |
 | `--axis-filters '>0,>0,>0'` | Comma-separated X,Y,Z filters. Quote the value so your shell does not treat `>` as redirection. Leave an axis empty to skip it, for example `'>0,,>450'`. |
 | `--formats pdf,vrs,...` | Comma-separated export formats: pdf, vrs, geojson, dxf (default: all) |
 | `--show-points` | Show original data points on the visualization |
@@ -63,6 +66,12 @@ uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500
 # Launch interactive web viewer
 uv run contourer data/zakazka-body.txt --web
 
+# Launch web viewer with an OpenStreetMap underlay for WGS84 data
+uv run contourer data/zakazka-body.txt --web --basemap osm --source-crs EPSG:4326
+
+# Launch web viewer with an OpenStreetMap underlay for projected survey data
+uv run contourer data/zakazka-body.txt --web --basemap osm --source-crs EPSG:2065 --source-axis-order yx
+
 # Web viewer on custom port
 uv run contourer data/zakazka-body.txt --web --port 8080
 ```
@@ -80,6 +89,7 @@ uv run contourer data/zakazka-body.txt --web
 **Features:**
 - 🔍 **Zoom & Pan** - Contour lines maintain constant width at any zoom level
 - ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
+- 🗺️ **Optional OSM Underlay** - Switch the 2D map between local coordinates and OpenStreetMap when you know the source CRS
 - 🧹 **Axis Filters** - Filter X, Y, and Z before triangulation. In the web UI, enter `>0` in all three fields to keep only positive coordinates.
 - 📍 **Show Points** - Toggle original data points visibility
 - 🏷️ **Show Point Labels** - Toggle parsed point labels independently from point markers
@@ -87,6 +97,22 @@ uv run contourer data/zakazka-body.txt --web
 - 🏷️ **Elevation Labels** - Toggle labels on major contours
 - 💡 **Hover Tooltips** - See exact elevation on hover
 - 🧊 **3D View** - Interactive 3D terrain visualization with AutoCAD-style controls
+
+### Map Underlay and Coordinate Mapping
+
+The default 2D viewer uses the raw source coordinates directly, with no web-map background. This is still the safest mode for arbitrary local survey data.
+
+If your input coordinates are already in a known CRS, you can switch the 2D viewer to **OpenStreetMap**. In that mode, the app reprojects the 2D display only:
+
+```bash
+uv run contourer data/zakazka-body.txt --web --basemap osm --source-crs EPSG:2065 --source-axis-order yx
+```
+
+- `--source-crs EPSG:4326` is appropriate when the input file already contains longitude/latitude.
+- Projected CRS values such as `EPSG:2065` also work, as long as the input coordinates are in that CRS.
+- If the source file stores projected coordinates in `Y X Z` order, use `--source-axis-order yx`.
+- Exported files (`.vrs`, `.geojson`, `.dxf`, `.pdf`) and the 3D viewer remain in the original source coordinates.
+- v1 only supports known CRS input. Manual georeferencing or control-point calibration is not included.
 
 ### 3D View
 

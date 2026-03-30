@@ -1,14 +1,17 @@
 """Browser-based interactive contour map viewer."""
 
+import gzip
 import json
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, Response, render_template, request
 
 from .main import (
+    MapDisplaySettings,
     axis_filters_to_expressions,
+    build_display_transformer,
     compute_axis_filter_mask,
     load_point_cloud,
     describe_axis_filters,
@@ -22,6 +25,8 @@ from .main import (
     generate_auto_levels,
     generate_interval_levels,
     run_export,
+    transform_coordinates_for_display,
+    validate_map_display_settings,
 )
 
 
@@ -33,9 +38,18 @@ def create_app(
     initial_axis_filters: Optional[str] = None,
     initial_show_points: bool = False,
     initial_show_point_labels: bool = False,
+    initial_basemap: str = 'none',
+    initial_source_crs: Optional[str] = None,
+    initial_source_axis_order: str = 'xy',
 ) -> Flask:
     """Create Flask app with the given data file and optional initial settings."""
     app = Flask(__name__, template_folder='templates', static_folder='static')
+
+    initial_map_display_settings = validate_map_display_settings(
+        initial_basemap,
+        initial_source_crs,
+        initial_source_axis_order,
+    )
     
     # Store file path and cached data
     app.config['FILE_PATH'] = file_path
@@ -49,6 +63,9 @@ def create_app(
         'axis_filters': initial_axis_filters,
         'show_points': initial_show_points,
         'show_point_labels': initial_show_point_labels,
+        'basemap': initial_map_display_settings.basemap,
+        'source_crs': initial_map_display_settings.source_crs,
+        'source_axis_order': initial_map_display_settings.source_axis_order,
     }
 
     def serialize_label_catalog(point_labels) -> list[dict[str, object]]:
@@ -59,6 +76,139 @@ def create_app(
             }
             for label_id, label in enumerate(point_labels.catalog)
         ]
+
+    def make_json_response(payload: object, status: int = 200) -> Response:
+        encoded_payload = json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+        accepts_gzip = 'gzip' in request.headers.get('Accept-Encoding', '').lower()
+
+        if accepts_gzip:
+            compressed_payload = gzip.compress(encoded_payload, compresslevel=5)
+            response = Response(compressed_payload, status=status, mimetype='application/json')
+            response.headers['Content-Encoding'] = 'gzip'
+            response.headers['Content-Length'] = str(len(compressed_payload))
+        else:
+            response = Response(encoded_payload, status=status, mimetype='application/json')
+            response.headers['Content-Length'] = str(len(encoded_payload))
+
+        response.headers['Vary'] = 'Accept-Encoding'
+        return response
+
+    def serialize_map_display_settings(map_display_settings: MapDisplaySettings) -> dict[str, object]:
+        return {
+            'basemap': map_display_settings.basemap,
+            'source_crs': map_display_settings.source_crs,
+            'source_axis_order': map_display_settings.source_axis_order,
+            'display_crs': map_display_settings.display_crs,
+            'coordinate_mode': map_display_settings.coordinate_mode,
+        }
+
+    def get_requested_map_display_settings() -> MapDisplaySettings:
+        return validate_map_display_settings(
+            request.args.get(
+                'basemap',
+                default=app.config['INITIAL_SETTINGS']['basemap'],
+                type=str,
+            ),
+            request.args.get(
+                'source_crs',
+                default=app.config['INITIAL_SETTINGS']['source_crs'],
+                type=str,
+            ),
+            request.args.get(
+                'source_axis_order',
+                default=app.config['INITIAL_SETTINGS']['source_axis_order'],
+                type=str,
+            ),
+        )
+
+    def get_display_transformer(map_display_settings: MapDisplaySettings):
+        if not map_display_settings.uses_geographic_coordinates:
+            return None
+
+        cache = app.config['CACHE']
+        cache_key = ('display-transformer', map_display_settings.cache_key)
+        if cache_key not in cache:
+            cache[cache_key] = build_display_transformer(map_display_settings)
+
+        return cache[cache_key]
+
+    def get_display_xy(
+        points: np.ndarray,
+        axis_filters_text: Optional[str],
+        map_display_settings: MapDisplaySettings,
+    ) -> np.ndarray:
+        cache = app.config['CACHE']
+        axis_filters = parse_axis_filters(axis_filters_text)
+        axis_filters_key = normalize_axis_filters(axis_filters) or ''
+        cache_key = ('display-xy', axis_filters_key, map_display_settings.cache_key)
+
+        if cache_key not in cache:
+            transformer = get_display_transformer(map_display_settings)
+            display_x, display_y = transform_coordinates_for_display(
+                points[:, 0],
+                points[:, 1],
+                map_display_settings,
+                transformer=transformer,
+            )
+            cache[cache_key] = np.column_stack([display_x, display_y])
+
+        return cache[cache_key]
+
+    def transform_contours_for_display(
+        contours: dict[float, list[list[tuple[float, float]]]],
+        map_display_settings: MapDisplaySettings,
+    ) -> dict[float, list[list[tuple[float, float]]]]:
+        if not map_display_settings.uses_geographic_coordinates:
+            return contours
+
+        transformer = get_display_transformer(map_display_settings)
+        segment_refs: list[tuple[float, int, int]] = []
+        segment_arrays: list[np.ndarray] = []
+
+        for z_level, segments in contours.items():
+            for segment_index, segment in enumerate(segments):
+                if not segment:
+                    continue
+
+                segment_points = np.asarray(segment, dtype=float)
+                if len(segment_points) == 0:
+                    continue
+
+                segment_refs.append((float(z_level), segment_index, len(segment_points)))
+                segment_arrays.append(segment_points)
+
+        if not segment_arrays:
+            return {float(z_level): [] for z_level in contours.keys()}
+
+        concatenated_points = np.vstack(segment_arrays)
+        display_x, display_y = transform_coordinates_for_display(
+            concatenated_points[:, 0],
+            concatenated_points[:, 1],
+            map_display_settings,
+            transformer=transformer,
+        )
+
+        transformed_contours: dict[float, list[list[tuple[float, float]]]] = {}
+        offset = 0
+        original_level_counts = {float(z_level): len(segments) for z_level, segments in contours.items()}
+
+        for z_level, segment_count in original_level_counts.items():
+            transformed_contours[z_level] = [[] for _ in range(segment_count)]
+
+        for z_level, segment_index, segment_length in segment_refs:
+            segment_slice = slice(offset, offset + segment_length)
+            transformed_contours[z_level][segment_index] = [
+                (float(x), float(y))
+                for x, y in zip(display_x[segment_slice], display_y[segment_slice])
+            ]
+            offset += segment_length
+
+        for z_level, segments in contours.items():
+            transformed_contours[float(z_level)] = [
+                segment for segment in transformed_contours[float(z_level)] if segment
+            ]
+
+        return transformed_contours
     
     def get_cached_data(include_labels: bool = False):
         """Load and cache raw point cloud data, with labels only when needed."""
@@ -175,6 +325,11 @@ def create_app(
             initial['axis_filters'],
             include_labels=initial['show_point_labels'],
         )
+        initial_map_display_settings = validate_map_display_settings(
+            initial['basemap'],
+            initial['source_crs'],
+            initial['source_axis_order'],
+        )
         initial_axis_filters = parse_axis_filters(initial['axis_filters'])
         initial_axis_filter_x, initial_axis_filter_y, initial_axis_filter_z = axis_filters_to_expressions(initial_axis_filters)
         return render_template('map.html', 
@@ -189,6 +344,9 @@ def create_app(
                                initial_axis_filter_z=initial_axis_filter_z,
                                initial_show_points=initial['show_points'],
                                initial_show_point_labels=initial['show_point_labels'],
+                               initial_basemap=initial_map_display_settings.basemap,
+                               initial_source_crs=initial_map_display_settings.source_crs or '',
+                               initial_source_axis_order=initial_map_display_settings.source_axis_order,
                                active_points=selection['active_points'],
                                filtered_out_points=selection['filtered_out_points'],
                                load_summary=load_summary)
@@ -197,12 +355,15 @@ def create_app(
     def get_bounds():
         """Get the bounding box of the data."""
         try:
-            points, _, z_stats, _, selection = get_filtered_data(get_requested_axis_filters())
+            axis_filters_text = get_requested_axis_filters()
+            points, _, z_stats, _, selection = get_filtered_data(axis_filters_text)
+            map_display_settings = get_requested_map_display_settings()
         except ValueError as error:
-            return jsonify({'error': str(error)}), 400
+            return make_json_response({'error': str(error)}, status=400)
 
-        x, y = points[:, 0], points[:, 1]
-        return jsonify({
+        display_xy = get_display_xy(points, axis_filters_text, map_display_settings)
+        x, y = display_xy[:, 0], display_xy[:, 1]
+        response = {
             'x_min': float(np.min(x)),
             'x_max': float(np.max(x)),
             'y_min': float(np.min(y)),
@@ -213,7 +374,9 @@ def create_app(
             'filtered_out_points': selection['filtered_out_points'],
             'labeled_points': selection['labeled_points'],
             'unique_labels': selection['unique_labels'],
-        })
+        }
+        response.update(serialize_map_display_settings(map_display_settings))
+        return make_json_response(response)
     
     @app.route('/api/points')
     def get_points():
@@ -221,18 +384,24 @@ def create_app(
         include_labels = request.args.get('include_labels', default='false').lower() == 'true'
 
         try:
+            axis_filters_text = get_requested_axis_filters()
             points, point_labels, _, _, selection = get_filtered_data(
-                get_requested_axis_filters(),
+                axis_filters_text,
                 include_labels=include_labels,
             )
+            map_display_settings = get_requested_map_display_settings()
         except ValueError as error:
-            return jsonify({'error': str(error)}), 400
+            return make_json_response({'error': str(error)}, status=400)
+
+        display_xy = get_display_xy(points, axis_filters_text, map_display_settings)
         
         features = []
-        for i, (x, y, z) in enumerate(points):
+        for i, ((source_x, source_y, z), (display_x, display_y)) in enumerate(zip(points, display_xy)):
             properties = {
                 "elevation": float(z),
                 "id": i,
+                "source_x": float(source_x),
+                "source_y": float(source_y),
             }
 
             if include_labels:
@@ -249,7 +418,7 @@ def create_app(
                 "properties": properties,
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [float(x), float(y)]
+                    "coordinates": [float(display_x), float(display_y)]
                 }
             })
 
@@ -265,9 +434,10 @@ def create_app(
                 'labeled_points': selection['labeled_points'],
                 'unique_labels': selection['unique_labels'],
                 'label_catalog': serialize_label_catalog(point_labels),
+                **serialize_map_display_settings(map_display_settings),
             }
 
-        return jsonify(response)
+        return make_json_response(response)
     
     @app.route('/api/contours')
     def get_contours():
@@ -275,8 +445,9 @@ def create_app(
         try:
             axis_filters_text = get_requested_axis_filters()
             points, _, z_stats, _, selection = get_filtered_data(axis_filters_text)
+            map_display_settings = get_requested_map_display_settings()
         except ValueError as error:
-            return jsonify({'error': str(error)}), 400
+            return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
         minor_interval = request.args.get('minor_interval', type=float)
@@ -298,6 +469,7 @@ def create_app(
         
         # Extract contours
         contours = extract_contour_paths(triangulation, points[:, 2], levels)
+        contours = transform_contours_for_display(contours, map_display_settings)
         
         # Convert to GeoJSON with major/minor classification
         features = []
@@ -322,7 +494,7 @@ def create_app(
                     }
                 })
         
-        return jsonify({
+        return make_json_response({
             "type": "FeatureCollection",
             "features": features,
             "meta": {
@@ -336,6 +508,7 @@ def create_app(
                 "unique_labels": selection['unique_labels'],
                 "z_min": z_stats['min'],
                 "z_max": z_stats['max'],
+                **serialize_map_display_settings(map_display_settings),
             }
         })
     
@@ -346,7 +519,7 @@ def create_app(
             axis_filters_text = get_requested_axis_filters()
             points, _, z_stats, _, _ = get_filtered_data(axis_filters_text)
         except ValueError as error:
-            return jsonify({'error': str(error)}), 400
+            return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
         max_distance = request.args.get('max_distance', type=float)
@@ -362,7 +535,7 @@ def create_app(
         # Get triangles (indices into vertices), excluding masked ones
         triangles = triangulation.get_masked_triangles().tolist()
         
-        return jsonify({
+        return make_json_response({
             'vertices': {
                 'x': x,
                 'y': y,
@@ -385,7 +558,7 @@ def create_app(
                 include_labels=show_point_labels,
             )
         except ValueError as error:
-            return jsonify({'error': str(error)}), 400
+            return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
         minor_interval = request.args.get('minor_interval', type=float)
@@ -411,7 +584,7 @@ def create_app(
             show_point_labels=show_point_labels,
         )
         
-        return jsonify({
+        return make_json_response({
             "success": True,
             "files": {fmt: str(path) for fmt, path in exported_paths.items()}
         })
@@ -429,6 +602,9 @@ def run_web_server(
     axis_filters: Optional[str] = None,
     show_points: bool = False,
     show_point_labels: bool = False,
+    basemap: str = 'none',
+    source_crs: Optional[str] = None,
+    source_axis_order: str = 'xy',
 ):
     """Start the web server for interactive viewing."""
     app = create_app(
@@ -439,6 +615,9 @@ def run_web_server(
         initial_axis_filters=axis_filters,
         initial_show_points=show_points,
         initial_show_point_labels=show_point_labels,
+        initial_basemap=basemap,
+        initial_source_crs=source_crs,
+        initial_source_axis_order=source_axis_order,
     )
     
     print(f"\nContour Viewer starting...")

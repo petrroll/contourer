@@ -648,6 +648,30 @@
                 </div>
 
                 <div class="control-group">
+                    <label for="basemap-select" data-i18n="basemap">Basemap</label>
+                    <select id="basemap-select">
+                        <option value="none" {{ 'selected' if initial_basemap == 'none' else '' }} data-i18n="basemapLocal">Local Coordinates</option>
+                        <option value="osm" {{ 'selected' if initial_basemap == 'osm' else '' }} data-i18n="basemapOsm">OpenStreetMap</option>
+                    </select>
+                    <div class="control-hint" data-i18n="basemapHelp">OpenStreetMap requires a known source CRS and only affects the 2D web viewer.</div>
+                </div>
+
+                <div class="control-group">
+                    <label for="source-crs" data-i18n="sourceCrs">Source CRS</label>
+                    <input type="text" id="source-crs" value="{{ initial_source_crs }}" placeholder="EPSG:2065" spellcheck="false">
+                    <div class="control-hint" data-i18n="sourceCrsHelp">Examples: EPSG:4326 for longitude/latitude or a projected EPSG code such as EPSG:2065.</div>
+                </div>
+
+                <div class="control-group">
+                    <label for="source-axis-order" data-i18n="sourceAxisOrder">Source Axis Order</label>
+                    <select id="source-axis-order">
+                        <option value="xy" {{ 'selected' if initial_source_axis_order == 'xy' else '' }} data-i18n="sourceAxisOrderXY">X then Y</option>
+                        <option value="yx" {{ 'selected' if initial_source_axis_order == 'yx' else '' }} data-i18n="sourceAxisOrderYX">Y then X</option>
+                    </select>
+                    <div class="control-hint" data-i18n="sourceAxisOrderHelp">Use Y/X when the input file stores coordinates as Y then X instead of X then Y.</div>
+                </div>
+
+                <div class="control-group">
                     <label data-i18n="axisFilters">Axis Filters (X, Y, Z)</label>
                     <div class="axis-filter-grid">
                         <input type="text" id="axis-filter-x" value="{{ initial_axis_filter_x }}" placeholder="" spellcheck="false" aria-label="X axis filter">
@@ -793,15 +817,15 @@
             <!-- Coordinate display -->
             <div class="coord-display" id="coord-display">
                 <div class="coord-row">
-                    <span class="coord-label">X:</span>
+                    <span class="coord-label" id="coord-x-label">X:</span>
                     <span class="coord-value" id="coord-x">0.000</span>
                 </div>
                 <div class="coord-row">
-                    <span class="coord-label">Y:</span>
+                    <span class="coord-label" id="coord-y-label">Y:</span>
                     <span class="coord-value" id="coord-y">0.000</span>
                 </div>
                 <div class="coord-row">
-                    <span class="coord-label">Z:</span>
+                    <span class="coord-label" id="coord-z-label">Z:</span>
                     <span class="coord-value" id="coord-z">-</span>
                 </div>
             </div>
@@ -838,10 +862,26 @@
                 minorInterval: 'Minor Interval (m)',
                 majorInterval: 'Major Interval (m)',
                 maxDistance: 'Max Edge Distance (0 = auto)',
+                basemap: 'Basemap',
+                basemapLocal: 'Local Coordinates',
+                basemapOsm: 'OpenStreetMap',
+                basemapHelp: 'OpenStreetMap requires a known source CRS and only affects the 2D web viewer.',
+                sourceCrs: 'Source CRS',
+                sourceCrsHelp: 'Examples: EPSG:4326 for longitude/latitude or a projected EPSG code such as EPSG:2065.',
+                sourceCrsPlaceholder: 'EPSG:2065',
+                sourceAxisOrder: 'Source Axis Order',
+                sourceAxisOrderXY: 'X then Y',
+                sourceAxisOrderYX: 'Y then X',
+                sourceAxisOrderHelp: 'Use Y/X when the input file stores coordinates as Y then X instead of X then Y.',
                 axisFilters: 'Axis Filters (X, Y, Z)',
                 axisFiltersHelp: 'Filters are empty by default, so all values are kept. Use >, >=, <, <=, ==, or != only when you want to limit an axis.',
                 axisFiltersExampleTitle: 'Example Filled Values',
                 axisFiltersExample: 'Example: fill all three fields with >0 to keep only positive coordinates.',
+                coordXLabel: 'X:',
+                coordYLabel: 'Y:',
+                coordZLabel: 'Z:',
+                coordLonLabel: 'Lon:',
+                coordLatLabel: 'Lat:',
                 displayOptions: 'Display Options',
                 showDataPoints: 'Show Data Points',
                 showPointLabels: 'Show Point Labels',
@@ -906,10 +946,26 @@
                 minorInterval: 'Vedlejší interval (m)',
                 majorInterval: 'Hlavní interval (m)',
                 maxDistance: 'Max. vzdálenost hrany (0 = auto)',
+                basemap: 'Podkladová mapa',
+                basemapLocal: 'Místní souřadnice',
+                basemapOsm: 'OpenStreetMap',
+                basemapHelp: 'OpenStreetMap vyžaduje známý zdrojový CRS a ovlivňuje jen 2D webové zobrazení.',
+                sourceCrs: 'Zdrojový CRS',
+                sourceCrsHelp: 'Příklady: EPSG:4326 pro zeměpisné souřadnice nebo projektovaný EPSG kód, například EPSG:2065.',
+                sourceCrsPlaceholder: 'EPSG:2065',
+                sourceAxisOrder: 'Pořadí zdrojových os',
+                sourceAxisOrderXY: 'X potom Y',
+                sourceAxisOrderYX: 'Y potom X',
+                sourceAxisOrderHelp: 'Použijte Y/X, pokud vstupní soubor ukládá souřadnice v pořadí Y potom X místo X potom Y.',
                 axisFilters: 'Filtry os (X, Y, Z)',
                 axisFiltersHelp: 'Filtry jsou ve výchozím stavu prázdné, takže se ponechají všechny hodnoty. Operátory >, >=, <, <=, == nebo != použijte jen tehdy, když chcete osu omezit.',
                 axisFiltersExampleTitle: 'Příklad vyplněných hodnot',
                 axisFiltersExample: 'Příklad: vyplňte do všech tří polí >0 a zůstanou jen kladné souřadnice.',
+                coordXLabel: 'X:',
+                coordYLabel: 'Y:',
+                coordZLabel: 'Z:',
+                coordLonLabel: 'Lon:',
+                coordLatLabel: 'Lat:',
                 displayOptions: 'Možnosti zobrazení',
                 showDataPoints: 'Zobrazit datové body',
                 showPointLabels: 'Zobrazit popisky bodů',
@@ -976,6 +1032,13 @@
                 }
             });
             document.documentElement.lang = currentLanguage;
+
+            const sourceCrsInput = document.getElementById('source-crs');
+            if (sourceCrsInput) {
+                sourceCrsInput.placeholder = t('sourceCrsPlaceholder');
+            }
+
+            updateCoordinateLabels();
         }
         
         function setLanguage(lang) {
@@ -1001,6 +1064,9 @@
                 minorInterval: document.getElementById('minor-interval').value,
                 majorInterval: document.getElementById('major-interval').value,
                 maxDistance: document.getElementById('max-distance').value,
+                basemap: document.getElementById('basemap-select').value,
+                sourceCrs: document.getElementById('source-crs').value,
+                sourceAxisOrder: document.getElementById('source-axis-order').value,
                 axisFilterX: document.getElementById('axis-filter-x').value,
                 axisFilterY: document.getElementById('axis-filter-y').value,
                 axisFilterZ: document.getElementById('axis-filter-z').value,
@@ -1020,9 +1086,20 @@
             if (stored) {
                 try {
                     const settings = JSON.parse(stored);
+                    const normalizedSourceCrs = settings.sourceCrs === 'auto' ? '' : settings.sourceCrs;
                     if (settings.minorInterval !== undefined) document.getElementById('minor-interval').value = settings.minorInterval;
                     if (settings.majorInterval !== undefined) document.getElementById('major-interval').value = settings.majorInterval;
                     if (settings.maxDistance !== undefined) document.getElementById('max-distance').value = settings.maxDistance;
+                    if (settings.basemap !== undefined) {
+                        const hasStoredSourceCrs = typeof normalizedSourceCrs === 'string' && normalizedSourceCrs.trim().length > 0;
+                        document.getElementById('basemap-select').value = settings.basemap === 'osm' && !hasStoredSourceCrs
+                            ? 'none'
+                            : settings.basemap;
+                    }
+                    if (settings.sourceCrs !== undefined) document.getElementById('source-crs').value = normalizedSourceCrs;
+                    if (settings.sourceAxisOrder !== undefined) {
+                        document.getElementById('source-axis-order').value = settings.sourceAxisOrder === 'yx' ? 'yx' : 'xy';
+                    }
                     if (settings.axisFilterX !== undefined) document.getElementById('axis-filter-x').value = settings.axisFilterX;
                     if (settings.axisFilterY !== undefined) document.getElementById('axis-filter-y').value = settings.axisFilterY;
                     if (settings.axisFilterZ !== undefined) document.getElementById('axis-filter-z').value = settings.axisFilterZ;
@@ -1051,6 +1128,25 @@
             params.set('axis_filters', getAxisFiltersValue());
         }
 
+        function getMapDisplaySettingsValue() {
+            const basemap = document.getElementById('basemap-select').value;
+            const sourceCrs = document.getElementById('source-crs').value.trim();
+            const sourceAxisOrder = document.getElementById('source-axis-order').value;
+
+            return {
+                basemap,
+                sourceCrs,
+                sourceAxisOrder,
+            };
+        }
+
+        function appendMapDisplayParams(params) {
+            const mapDisplaySettings = getMapDisplaySettingsValue();
+            params.set('basemap', mapDisplaySettings.basemap);
+            params.set('source_crs', mapDisplaySettings.sourceCrs);
+            params.set('source_axis_order', mapDisplaySettings.sourceAxisOrder);
+        }
+
         function quoteShellArgument(value) {
             return "'" + value.replace(/'/g, "'\\''") + "'";
         }
@@ -1065,6 +1161,20 @@
                     "'": '&#39;'
                 }[character];
             });
+        }
+
+        function updateCoordinateLabels() {
+            const coordXLabel = document.getElementById('coord-x-label');
+            const coordYLabel = document.getElementById('coord-y-label');
+            const coordZLabel = document.getElementById('coord-z-label');
+            if (!coordXLabel || !coordYLabel || !coordZLabel) {
+                return;
+            }
+
+            const useGeographicLabels = currentView === '2d' && mapMode === 'geographic';
+            coordXLabel.textContent = useGeographicLabels ? t('coordLonLabel') : t('coordXLabel');
+            coordYLabel.textContent = useGeographicLabels ? t('coordLatLabel') : t('coordYLabel');
+            coordZLabel.textContent = t('coordZLabel');
         }
 
         function updateDataInfo(meta) {
@@ -1086,9 +1196,25 @@
 
         async function fetchJson(url) {
             const response = await fetch(url);
-            const data = await response.json();
+            const responseText = await response.text();
+            let data;
+
+            try {
+                data = responseText ? JSON.parse(responseText) : null;
+            } catch (error) {
+                const responseSnippet = responseText.trim().slice(0, 200);
+                throw new Error(
+                    responseSnippet.length > 0
+                        ? `Invalid JSON response: ${responseSnippet}`
+                        : 'Empty JSON response'
+                );
+            }
+
             if (!response.ok) {
-                throw new Error(data.error || response.statusText);
+                throw new Error((data && data.error) || response.statusText);
+            }
+            if (data === null) {
+                throw new Error('Empty JSON response');
             }
             return data;
         }
@@ -1122,12 +1248,52 @@
             }
         };
         
-        // Initialize map with CRS.Simple for non-geographic data
-        const map = L.map('map', {
-            crs: L.CRS.Simple,
-            minZoom: -5,
-            maxZoom: 10,
-        });
+        let map = null;
+        let mapMode = 'local';
+
+        function create2DMap(nextMapMode) {
+            if (map) {
+                map.remove();
+                map = null;
+            }
+
+            contourLayer = null;
+            pointsLayer = null;
+            contourLabelsLayer = null;
+            pointLabelsLayer = null;
+
+            if (nextMapMode === 'geographic') {
+                map = L.map('map', {
+                    minZoom: 2,
+                    maxZoom: 19,
+                });
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors',
+                    maxZoom: 19,
+                    referrerPolicy: 'origin',
+                }).addTo(map);
+            } else {
+                map = L.map('map', {
+                    crs: L.CRS.Simple,
+                    minZoom: -5,
+                    maxZoom: 10,
+                });
+            }
+
+            mapMode = nextMapMode;
+            updateCoordinateLabels();
+        }
+
+        function fitMapToBounds(boundsData) {
+            if (!map || !boundsData) {
+                return;
+            }
+
+            const corner1 = L.latLng(boundsData.y_min, boundsData.x_min);
+            const corner2 = L.latLng(boundsData.y_max, boundsData.x_max);
+            const mapBounds = L.latLngBounds(corner1, corner2);
+            map.fitBounds(mapBounds, { padding: [50, 50] });
+        }
         
         // Layers
         let contourLayer = null;
@@ -1148,23 +1314,29 @@
         }
         
         // Fetch bounds and initialize view
-        async function initializeMap() {
+        async function initializeMap(resetView = true) {
             try {
                 setStatus(t('loadingBounds'), 'loading');
                 const params = new URLSearchParams();
                 appendAxisFiltersParam(params);
-                bounds = await fetchJson(`/api/bounds?${params}`);
+                appendMapDisplayParams(params);
+                const nextBounds = await fetchJson(`/api/bounds?${params}`);
+                const nextMapMode = nextBounds.coordinate_mode === 'geographic' ? 'geographic' : 'local';
+
+                if (!map || mapMode !== nextMapMode) {
+                    create2DMap(nextMapMode);
+                    resetView = true;
+                }
+
+                bounds = nextBounds;
                 updateDataInfo(bounds);
-                
-                // Set map bounds (Leaflet Simple CRS uses [y, x] for LatLng)
-                const corner1 = L.latLng(bounds.y_min, bounds.x_min);
-                const corner2 = L.latLng(bounds.y_max, bounds.x_max);
-                const mapBounds = L.latLngBounds(corner1, corner2);
-                
-                map.fitBounds(mapBounds, { padding: [50, 50] });
                 
                 zMin = bounds.z_min;
                 zMax = bounds.z_max;
+
+                if (resetView && currentView === '2d') {
+                    fitMapToBounds(bounds);
+                }
                 
                 // Load initial contours
                 await updateContours();
@@ -1189,6 +1361,7 @@
                 // Build query params
                 const params = new URLSearchParams();
                 appendAxisFiltersParam(params);
+                appendMapDisplayParams(params);
                 if (minorInterval > 0) params.append('minor_interval', minorInterval);
                 if (majorInterval > 0) params.append('major_interval', majorInterval);
                 if (maxDistance > 0) params.append('max_distance', maxDistance);
@@ -1271,15 +1444,15 @@
         }
         
         function clearPointOverlays() {
-            if (pointsLayer) {
+            if (pointsLayer && map) {
                 map.removeLayer(pointsLayer);
-                pointsLayer = null;
             }
+            pointsLayer = null;
 
-            if (pointLabelsLayer) {
+            if (pointLabelsLayer && map) {
                 map.removeLayer(pointLabelsLayer);
-                pointLabelsLayer = null;
             }
+            pointLabelsLayer = null;
         }
 
         async function refreshPointOverlays(updateStatus = true) {
@@ -1299,6 +1472,7 @@
             try {
                 const params = new URLSearchParams();
                 appendAxisFiltersParam(params);
+                appendMapDisplayParams(params);
                 if (showPointLabels) {
                     params.set('include_labels', 'true');
                 }
@@ -1318,11 +1492,17 @@
                             });
                         },
                         onEachFeature: (feature, layer) => {
-                            const [x, y] = feature.geometry.coordinates;
+                            const [displayX, displayY] = feature.geometry.coordinates;
+                            const sourceX = feature.properties.source_x;
+                            const sourceY = feature.properties.source_y;
                             const z = feature.properties.elevation.toFixed(3);
                             const label = feature.properties.label;
                             const labelLine = label ? `<br>${t('pointLabel')}: ${escapeHtml(label)}` : '';
-                            layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m${labelLine}`, {
+                            const tooltip = mapMode === 'geographic'
+                                ? `Lon: ${displayX.toFixed(6)}<br>Lat: ${displayY.toFixed(6)}<br>X: ${sourceX.toFixed(3)}<br>Y: ${sourceY.toFixed(3)}<br>Z: ${z}m${labelLine}`
+                                : `X: ${sourceX.toFixed(3)}<br>Y: ${sourceY.toFixed(3)}<br>Z: ${z}m${labelLine}`;
+
+                            layer.bindTooltip(tooltip, {
                                 className: 'elevation-tooltip'
                             });
                         }
@@ -1372,8 +1552,13 @@
             const axisFilters = getAxisFiltersValue();
             const showPoints = document.getElementById('show-points').checked;
             const showPointLabels = document.getElementById('show-point-labels').checked;
+            const mapDisplaySettings = getMapDisplaySettingsValue();
             
             let cmd = 'uv run contourer "{{ filename }}"';
+
+            if (mapDisplaySettings.basemap !== 'none' || mapDisplaySettings.sourceCrs.length > 0) {
+                cmd += ' --web';
+            }
             
             if (minorInterval > 0) {
                 cmd += ` --minor-interval ${minorInterval}`;
@@ -1392,6 +1577,15 @@
             }
             if (showPointLabels) {
                 cmd += ' --show-point-labels';
+            }
+            if (mapDisplaySettings.basemap !== 'none') {
+                cmd += ` --basemap ${mapDisplaySettings.basemap}`;
+            }
+            if (mapDisplaySettings.sourceCrs.length > 0) {
+                cmd += ` --source-crs ${quoteShellArgument(mapDisplaySettings.sourceCrs)}`;
+            }
+            if (mapDisplaySettings.sourceAxisOrder !== 'xy') {
+                cmd += ` --source-axis-order ${mapDisplaySettings.sourceAxisOrder}`;
             }
             
             return cmd;
@@ -1969,6 +2163,10 @@
         }
         
         function update2DCoordinates(e) {
+            if (!map) {
+                return;
+            }
+
             const container = document.getElementById('map-container');
             const rect = container.getBoundingClientRect();
             
@@ -1980,7 +2178,6 @@
             const point = L.point(x, y);
             const latlng = map.containerPointToLatLng(point);
             
-            // In CRS.Simple, lat = y, lng = x
             coordX.textContent = latlng.lng.toFixed(3);
             coordY.textContent = latlng.lat.toFixed(3);
             coordZ.textContent = '-'; // No Z for 2D cursor position
@@ -2087,7 +2284,14 @@
                 }
                 
                 // Invalidate Leaflet map size
-                setTimeout(() => map.invalidateSize(), 100);
+                setTimeout(() => {
+                    if (map) {
+                        map.invalidateSize();
+                        if (bounds) {
+                            fitMapToBounds(bounds);
+                        }
+                    }
+                }, 100);
                 
             } else {
                 mapEl.style.display = 'none';
@@ -2108,6 +2312,8 @@
                     animate3D();
                 });
             }
+
+            updateCoordinateLabels();
         }
         
         function update3DMesh() {
@@ -2142,6 +2348,21 @@
             saveSettings();
             updateCommandLine();
             await refreshPointOverlays();
+        });
+        document.getElementById('basemap-select').addEventListener('change', async () => {
+            saveSettings();
+            updateCommandLine();
+            await initializeMap();
+        });
+        document.getElementById('source-crs').addEventListener('change', async () => {
+            saveSettings();
+            updateCommandLine();
+            await initializeMap();
+        });
+        document.getElementById('source-axis-order').addEventListener('change', async () => {
+            saveSettings();
+            updateCommandLine();
+            await initializeMap();
         });
         document.getElementById('show-labels').addEventListener('change', async () => {
             saveSettings();
