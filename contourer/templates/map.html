@@ -545,12 +545,6 @@
                         <span class="stats-value">{{ load_summary.invalid_number_lines }}</span>
                     </div>
                     {% endif %}
-                    {% if load_summary.positive_xy_lines %}
-                    <div class="stats-row">
-                        <span class="stats-label" data-i18n="positiveXYLines">Positive X/Y Skipped</span>
-                        <span class="stats-value">{{ load_summary.positive_xy_lines }}</span>
-                    </div>
-                    {% endif %}
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="zMin">Z Min</span>
                         <span class="stats-value">{{ "%.2f"|format(z_min) }}</span>
@@ -739,7 +733,6 @@
                 blankLines: 'Blank Lines',
                 incompleteLines: 'Incomplete Lines',
                 invalidNumberLines: 'Invalid Numeric Lines',
-                positiveXYLines: 'Positive X/Y Skipped',
                 zMin: 'Z Min',
                 zMax: 'Z Max',
                 contourSettings: 'Contour Settings',
@@ -800,7 +793,6 @@
                 blankLines: 'Prázdné řádky',
                 incompleteLines: 'Neúplné řádky',
                 invalidNumberLines: 'Řádky s neplatným číslem',
-                positiveXYLines: 'Přeskočené kladné X/Y',
                 zMin: 'Z Min',
                 zMax: 'Z Max',
                 contourSettings: 'Nastavení vrstevnic',

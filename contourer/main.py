@@ -23,7 +23,6 @@ class PointCloudLoadSummary:
     blank_lines: int
     incomplete_lines: int
     invalid_number_lines: int
-    positive_xy_lines: int
     decimal_comma_fixed_lines: int
 
 
@@ -33,12 +32,42 @@ class PointCloudLoadResult:
     summary: PointCloudLoadSummary
 
 
-def _parse_point_line(line: str) -> tuple[Optional[tuple[float, float, float]], str, bool]:
+def _parse_numeric_token(token: bytes) -> tuple[Optional[float], bool]:
+    normalized_token = token
+    decimal_comma_fixed = False
+
+    if b',' in token and b'.' not in token:
+        normalized_token = token.replace(b',', b'.')
+        decimal_comma_fixed = True
+
+    try:
+        return float(normalized_token.decode('ascii')), decimal_comma_fixed
+    except (UnicodeDecodeError, ValueError):
+        return None, decimal_comma_fixed
+
+
+def _is_integer_token(token: bytes) -> bool:
+    try:
+        text = token.decode('ascii')
+    except UnicodeDecodeError:
+        return False
+
+    if text.startswith(('+', '-')):
+        text = text[1:]
+
+    return bool(text) and text.isdigit()
+
+
+def _parse_point_line(line: bytes) -> tuple[Optional[tuple[float, float, float]], str, bool]:
     """Parse a single point-cloud line.
 
-    Accepts either `X Y Z` or `ID X Y Z` style rows.
+    Accepts either `X Y Z` or `ID X Y Z` style rows and ignores any
+    additional columns after `Z`.
     """
     stripped = line.strip()
+    if stripped.startswith(b'\xef\xbb\xbf'):
+        stripped = stripped[3:]
+
     if not stripped:
         return None, 'blank', False
 
@@ -46,24 +75,23 @@ def _parse_point_line(line: str) -> tuple[Optional[tuple[float, float, float]], 
     if len(columns) < 3:
         return None, 'incomplete', False
 
-    value_columns = columns[:3] if len(columns) == 3 else columns[1:4]
+    value_columns = columns[:3]
+    if len(columns) >= 4 and _is_integer_token(columns[0]):
+        id_style_values = columns[1:4]
+        if all(_parse_numeric_token(token)[0] is not None for token in id_style_values):
+            value_columns = id_style_values
 
-    normalized_columns = []
+    values = []
     decimal_comma_fixed = False
     for token in value_columns:
-        normalized_token = token
-        if ',' in token and '.' not in token:
-            normalized_token = token.replace(',', '.')
+        value, token_decimal_comma_fixed = _parse_numeric_token(token)
+        if token_decimal_comma_fixed:
             decimal_comma_fixed = True
-        normalized_columns.append(normalized_token)
+        if value is None:
+            return None, 'invalid_number', decimal_comma_fixed
+        values.append(value)
 
-    try:
-        x, y, z = (float(token) for token in normalized_columns)
-    except ValueError:
-        return None, 'invalid_number', decimal_comma_fixed
-
-    if x > 0 and y > 0:
-        return None, 'positive_xy', decimal_comma_fixed
+    x, y, z = values
 
     return (x, y, z), 'loaded', decimal_comma_fixed
 
@@ -83,26 +111,24 @@ def print_load_summary(summary: PointCloudLoadSummary) -> None:
         print(f"  Incomplete lines:       {summary.incomplete_lines}")
     if summary.invalid_number_lines:
         print(f"  Invalid numeric lines:  {summary.invalid_number_lines}")
-    if summary.positive_xy_lines:
-        print(f"  Positive X/Y skipped:   {summary.positive_xy_lines}")
 
 
 def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
     """Load point cloud data from file.
 
-    File format: Either X Y Z (3 columns) or ID X Y Z (4 columns), space-separated.
-    Empty, incomplete, malformed, or obviously invalid rows are skipped.
-    Decimal commas in numeric values are normalized to dots when possible.
+    File format: Either X Y Z or ID X Y Z, space-separated.
+    Additional columns after Z are ignored. Empty, incomplete, or malformed
+    rows are skipped, and decimal commas in numeric values are normalized to
+    dots when possible.
     """
     points = []
     total_lines = 0
     blank_lines = 0
     incomplete_lines = 0
     invalid_number_lines = 0
-    positive_xy_lines = 0
     decimal_comma_fixed_lines = 0
 
-    with open(filepath, encoding='utf-8') as handle:
+    with open(filepath, 'rb') as handle:
         for line in handle:
             total_lines += 1
             point, status, decimal_comma_fixed = _parse_point_line(line)
@@ -120,8 +146,6 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
                 incomplete_lines += 1
             elif status == 'invalid_number':
                 invalid_number_lines += 1
-            elif status == 'positive_xy':
-                positive_xy_lines += 1
 
     data = np.asarray(points, dtype=float) if points else np.empty((0, 3), dtype=float)
 
@@ -132,7 +156,6 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
         blank_lines=blank_lines,
         incomplete_lines=incomplete_lines,
         invalid_number_lines=invalid_number_lines,
-        positive_xy_lines=positive_xy_lines,
         decimal_comma_fixed_lines=decimal_comma_fixed_lines,
     )
 

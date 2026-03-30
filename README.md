@@ -95,13 +95,14 @@ Switch to the 3D view by clicking the **3D View** tab in the sidebar. The 3D vie
 
 ## Input Format
 
-Space-separated: `ID X Y Z` (columns 2-4 used)
+Space-separated: `X Y Z` or `ID X Y Z`
 
 The loader is tolerant to common bad rows:
 - empty lines are skipped
 - incomplete rows are skipped
 - values with decimal comma are normalized and loaded when possible
-- rows where both `X` and `Y` are positive are skipped
+- any extra columns after `Z` are ignored, so point labels or notes after elevation do not break loading
+- trailing label text is ignored even when it contains non-UTF-8 bytes or legacy-encoded diacritics
 
 During CLI and web loading, the app reports how many rows were loaded and skipped, including a brief breakdown of skip reasons.
 
