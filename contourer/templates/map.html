@@ -427,6 +427,25 @@
             height: 100%;
             background: #fafafa;
         }
+
+        .contour-label,
+        .point-label {
+            background: transparent;
+            border: none;
+        }
+
+        .point-label-badge {
+            display: inline-block;
+            padding: 1px 4px;
+            font-size: 10px;
+            line-height: 1.2;
+            color: #1f1f1f;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(180, 180, 180, 0.95);
+            border-radius: 2px;
+            white-space: nowrap;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+        }
         
         /* 3D controls info */
         .controls-3d-info {
@@ -655,6 +674,11 @@
                     <input type="checkbox" id="show-points" {{ 'checked' if initial_show_points else '' }}>
                     <label for="show-points" data-i18n="showDataPoints">Show Data Points</label>
                 </div>
+
+                <div class="control-group checkbox-group">
+                    <input type="checkbox" id="show-point-labels" {{ 'checked' if initial_show_point_labels else '' }}>
+                    <label for="show-point-labels" data-i18n="showPointLabels">Show Point Labels</label>
+                </div>
                 
                 <div class="control-group checkbox-group">
                     <input type="checkbox" id="show-labels" checked>
@@ -820,7 +844,9 @@
                 axisFiltersExample: 'Example: fill all three fields with >0 to keep only positive coordinates.',
                 displayOptions: 'Display Options',
                 showDataPoints: 'Show Data Points',
+                showPointLabels: 'Show Point Labels',
                 showElevationLabels: 'Show Elevation Labels',
+                pointLabel: 'Label',
                 colorScheme: 'Color Scheme',
                 terrain: 'Terrain',
                 viridis: 'Viridis',
@@ -886,7 +912,9 @@
                 axisFiltersExample: 'Příklad: vyplňte do všech tří polí >0 a zůstanou jen kladné souřadnice.',
                 displayOptions: 'Možnosti zobrazení',
                 showDataPoints: 'Zobrazit datové body',
+                showPointLabels: 'Zobrazit popisky bodů',
                 showElevationLabels: 'Zobrazit popisky výšek',
+                pointLabel: 'Popis',
                 colorScheme: 'Barevné schéma',
                 terrain: 'Terén',
                 viridis: 'Viridis',
@@ -977,6 +1005,7 @@
                 axisFilterY: document.getElementById('axis-filter-y').value,
                 axisFilterZ: document.getElementById('axis-filter-z').value,
                 showPoints: document.getElementById('show-points').checked,
+                showPointLabels: document.getElementById('show-point-labels').checked,
                 showLabels: document.getElementById('show-labels').checked,
                 colorScheme: document.getElementById('color-scheme').value,
                 showContours3D: document.getElementById('show-contours-3d').checked,
@@ -998,6 +1027,7 @@
                     if (settings.axisFilterY !== undefined) document.getElementById('axis-filter-y').value = settings.axisFilterY;
                     if (settings.axisFilterZ !== undefined) document.getElementById('axis-filter-z').value = settings.axisFilterZ;
                     if (settings.showPoints !== undefined) document.getElementById('show-points').checked = settings.showPoints;
+                    if (settings.showPointLabels !== undefined) document.getElementById('show-point-labels').checked = settings.showPointLabels;
                     if (settings.showLabels !== undefined) document.getElementById('show-labels').checked = settings.showLabels;
                     if (settings.colorScheme !== undefined) document.getElementById('color-scheme').value = settings.colorScheme;
                     if (settings.showContours3D !== undefined) document.getElementById('show-contours-3d').checked = settings.showContours3D;
@@ -1023,6 +1053,18 @@
 
         function quoteShellArgument(value) {
             return "'" + value.replace(/'/g, "'\\''") + "'";
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, (character) => {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[character];
+            });
         }
 
         function updateDataInfo(meta) {
@@ -1090,7 +1132,8 @@
         // Layers
         let contourLayer = null;
         let pointsLayer = null;
-        let labelsLayer = null;
+        let contourLabelsLayer = null;
+        let pointLabelsLayer = null;
         
         // Cached data
         let bounds = null;
@@ -1154,7 +1197,7 @@
                 
                 // Remove old layers
                 if (contourLayer) map.removeLayer(contourLayer);
-                if (labelsLayer) map.removeLayer(labelsLayer);
+                if (contourLabelsLayer) map.removeLayer(contourLabelsLayer);
                 
                 // Create new contour layer
                 contourLayer = L.geoJSON(data, {
@@ -1180,7 +1223,7 @@
                 
                 // Add labels for major contours
                 if (showLabels) {
-                    labelsLayer = L.layerGroup();
+                    contourLabelsLayer = L.layerGroup();
                     const majorFeatures = data.features.filter(f => f.properties.is_major);
                     
                     // Sample labels along contours
@@ -1200,10 +1243,10 @@
                                     iconAnchor: [20, 7]
                                 })
                             });
-                            labelsLayer.addLayer(marker);
+                            contourLabelsLayer.addLayer(marker);
                         }
                     });
-                    labelsLayer.addTo(map);
+                    contourLabelsLayer.addTo(map);
                 }
                 
                 // Update stats
@@ -1211,11 +1254,10 @@
                 document.getElementById('stat-levels').textContent = data.meta.num_levels;
                 document.getElementById('stat-segments').textContent = data.meta.num_segments;
 
-                if (document.getElementById('show-points').checked) {
-                    await refreshPointsLayer(false);
-                } else if (pointsLayer) {
-                    map.removeLayer(pointsLayer);
-                    pointsLayer = null;
+                if (document.getElementById('show-points').checked || document.getElementById('show-point-labels').checked) {
+                    await refreshPointOverlays(false);
+                } else {
+                    clearPointOverlays();
                 }
                 
                 setStatus(t('loadedSegments', { count: data.meta.num_segments }), 'success');
@@ -1228,17 +1270,25 @@
             }
         }
         
-        function clearPointsLayer() {
+        function clearPointOverlays() {
             if (pointsLayer) {
                 map.removeLayer(pointsLayer);
                 pointsLayer = null;
             }
+
+            if (pointLabelsLayer) {
+                map.removeLayer(pointLabelsLayer);
+                pointLabelsLayer = null;
+            }
         }
 
-        async function refreshPointsLayer(updateStatus = true) {
-            clearPointsLayer();
+        async function refreshPointOverlays(updateStatus = true) {
+            clearPointOverlays();
 
-            if (!document.getElementById('show-points').checked) {
+            const showPoints = document.getElementById('show-points').checked;
+            const showPointLabels = document.getElementById('show-point-labels').checked;
+
+            if (!showPoints && !showPointLabels) {
                 return true;
             }
 
@@ -1249,28 +1299,59 @@
             try {
                 const params = new URLSearchParams();
                 appendAxisFiltersParam(params);
-                const data = await fetchJson(`/api/points?${params}`);
+                if (showPointLabels) {
+                    params.set('include_labels', 'true');
+                }
+                const data = await fetchJson(`/api/points?${params.toString()}`);
 
-                pointsLayer = L.geoJSON(data, {
-                    pointToLayer: (feature, latlng) => {
-                        const z = feature.properties.elevation;
-                        const colorFn = colorSchemes[document.getElementById('color-scheme').value];
-                        return L.circleMarker(latlng, {
-                            radius: 3,
-                            fillColor: colorFn(z, zMin, zMax),
-                            color: '#333',
-                            weight: 0.5,
-                            fillOpacity: 0.8
-                        });
-                    },
-                    onEachFeature: (feature, layer) => {
+                if (showPoints) {
+                    pointsLayer = L.geoJSON(data, {
+                        pointToLayer: (feature, latlng) => {
+                            const z = feature.properties.elevation;
+                            const colorFn = colorSchemes[document.getElementById('color-scheme').value];
+                            return L.circleMarker(latlng, {
+                                radius: 3,
+                                fillColor: colorFn(z, zMin, zMax),
+                                color: '#333',
+                                weight: 0.5,
+                                fillOpacity: 0.8
+                            });
+                        },
+                        onEachFeature: (feature, layer) => {
+                            const [x, y] = feature.geometry.coordinates;
+                            const z = feature.properties.elevation.toFixed(3);
+                            const label = feature.properties.label;
+                            const labelLine = label ? `<br>${t('pointLabel')}: ${escapeHtml(label)}` : '';
+                            layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m${labelLine}`, {
+                                className: 'elevation-tooltip'
+                            });
+                        }
+                    }).addTo(map);
+                }
+
+                if (showPointLabels) {
+                    pointLabelsLayer = L.layerGroup();
+                    data.features.forEach((feature) => {
+                        const label = feature.properties.label;
+                        if (!label) {
+                            return;
+                        }
+
                         const [x, y] = feature.geometry.coordinates;
-                        const z = feature.properties.elevation.toFixed(3);
-                        layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m`, {
-                            className: 'elevation-tooltip'
+                        const marker = L.marker([y, x], {
+                            interactive: false,
+                            icon: L.divIcon({
+                                className: 'point-label',
+                                html: `<span class="point-label-badge">${escapeHtml(label)}</span>`,
+                                iconSize: [Math.max(40, label.length * 7), 16],
+                                iconAnchor: [-4, 10]
+                            })
                         });
-                    }
-                }).addTo(map);
+                        pointLabelsLayer.addLayer(marker);
+                    });
+
+                    pointLabelsLayer.addTo(map);
+                }
 
                 if (updateStatus) {
                     setStatus(t('pointsLoaded'), 'success');
@@ -1283,21 +1364,14 @@
             }
         }
 
-        // Toggle data points visibility
-        async function togglePoints() {
-            if (document.getElementById('show-points').checked) {
-                await refreshPointsLayer();
-            } else {
-                clearPointsLayer();
-            }
-        }
-        
         // Generate command line based on current settings
         function generateCommandLine() {
             const minorInterval = parseFloat(document.getElementById('minor-interval').value);
             const majorInterval = parseFloat(document.getElementById('major-interval').value);
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             const axisFilters = getAxisFiltersValue();
+            const showPoints = document.getElementById('show-points').checked;
+            const showPointLabels = document.getElementById('show-point-labels').checked;
             
             let cmd = 'uv run contourer "{{ filename }}"';
             
@@ -1312,6 +1386,12 @@
             }
             if (axisFilters.replace(/,/g, '').length > 0) {
                 cmd += ` --axis-filters ${quoteShellArgument(axisFilters)}`;
+            }
+            if (showPoints) {
+                cmd += ' --show-points';
+            }
+            if (showPointLabels) {
+                cmd += ' --show-point-labels';
             }
             
             return cmd;
@@ -1368,6 +1448,7 @@
             const majorInterval = parseFloat(document.getElementById('major-interval').value);
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             const showPoints = document.getElementById('show-points').checked;
+            const showPointLabels = document.getElementById('show-point-labels').checked;
             
             const params = new URLSearchParams();
             appendAxisFiltersParam(params);
@@ -1375,6 +1456,7 @@
             if (majorInterval > 0) params.set('major_interval', majorInterval);
             if (maxDistance > 0) params.set('max_distance', maxDistance);
             params.set('show_points', showPoints);
+            params.set('show_point_labels', showPointLabels);
             
             return `/api/export?${params.toString()}`;
         }
@@ -2053,7 +2135,13 @@
         });
         document.getElementById('show-points').addEventListener('change', async () => {
             saveSettings();
-            await togglePoints();
+            updateCommandLine();
+            await refreshPointOverlays();
+        });
+        document.getElementById('show-point-labels').addEventListener('change', async () => {
+            saveSettings();
+            updateCommandLine();
+            await refreshPointOverlays();
         });
         document.getElementById('show-labels').addEventListener('change', async () => {
             saveSettings();

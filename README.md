@@ -29,6 +29,7 @@ By default, all formats are exported. Use `--formats` to select specific formats
 | `--axis-filters '>0,>0,>0'` | Comma-separated X,Y,Z filters. Quote the value so your shell does not treat `>` as redirection. Leave an axis empty to skip it, for example `'>0,,>450'`. |
 | `--formats pdf,vrs,...` | Comma-separated export formats: pdf, vrs, geojson, dxf (default: all) |
 | `--show-points` | Show original data points on the visualization |
+| `--show-point-labels` | Show parsed point labels in the PDF export and start the web viewer with point labels enabled |
 | `--web` | Launch interactive browser-based viewer |
 | `--port 5000` | Port for web server (default: 5000) |
 
@@ -52,6 +53,9 @@ uv run contourer data/zakazka-body.txt --axis-filters '>0,>0,>0'
 
 # Show original data points on the map
 uv run contourer data/zakazka-body.txt --show-points
+
+# Show parsed point labels in the exported PDF
+uv run contourer data/zakazka-body.txt --show-point-labels
 
 # Custom levels
 uv run contourer data/zakazka-body.txt --levels 495 496 497 498 499 500
@@ -78,6 +82,7 @@ uv run contourer data/zakazka-body.txt --web
 - ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
 - 🧹 **Axis Filters** - Filter X, Y, and Z before triangulation. In the web UI, enter `>0` in all three fields to keep only positive coordinates.
 - 📍 **Show Points** - Toggle original data points visibility
+- 🏷️ **Show Point Labels** - Toggle parsed point labels independently from point markers
 - 🎨 **Color Schemes** - Switch between Terrain, Viridis, Monochrome, Topographic
 - 🏷️ **Elevation Labels** - Toggle labels on major contours
 - 💡 **Hover Tooltips** - See exact elevation on hover
@@ -100,14 +105,15 @@ Switch to the 3D view by clicking the **3D View** tab in the sidebar. The 3D vie
 
 ## Input Format
 
-Space-separated: `X Y Z` or `ID X Y Z`
+Space-separated: `X Y Z`, `ID X Y Z`, `X Y Z LABEL...`, or `ID X Y Z LABEL...`
 
 The loader is tolerant to common bad rows:
 - empty lines are skipped
 - incomplete rows are skipped
 - values with decimal comma are normalized and loaded when possible
-- any extra columns after `Z` are ignored, so point labels or notes after elevation do not break loading
-- trailing label text is ignored even when it contains non-UTF-8 bytes or legacy-encoded diacritics
+- any extra columns after `Z` are loaded as a single optional point label, so trailing notes after elevation no longer need a separate preprocessing step
+- repeated point labels are deduplicated internally and exposed in the web API as a label catalog plus per-point `label_id`
+- trailing label text is decoded from raw bytes with fallback handling for legacy-encoded diacritics
 
 During CLI and web loading, the app reports how many rows were loaded and skipped, including a brief breakdown of skip reasons.
 
@@ -127,4 +133,4 @@ uv run contourer data/zakazka-body.txt --formats pdf,dxf
   - Major contour levels use `CONTOUR_MAJOR_<elevation>` layers with thicker lines
   - Polylines include Z coordinate at the contour elevation
   - Compatible with AutoCAD, QGIS, and other CAD/GIS software
-- **pdf**: Visualization map with filled contours, contour lines, and elevation labels
+- **pdf**: Visualization map with filled contours, contour lines, optional data points, contour elevation labels, and optional point labels

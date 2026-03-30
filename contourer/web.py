@@ -9,9 +9,10 @@ from flask import Flask, render_template, jsonify, request
 
 from .main import (
     axis_filters_to_expressions,
+    compute_axis_filter_mask,
     load_point_cloud,
     describe_axis_filters,
-    filter_points_by_axis,
+    filter_point_label_data,
     normalize_axis_filters,
     parse_axis_filters,
     print_load_summary,
@@ -31,6 +32,7 @@ def create_app(
     initial_max_distance: Optional[float] = None,
     initial_axis_filters: Optional[str] = None,
     initial_show_points: bool = False,
+    initial_show_point_labels: bool = False,
 ) -> Flask:
     """Create Flask app with the given data file and optional initial settings."""
     app = Flask(__name__, template_folder='templates', static_folder='static')
@@ -46,32 +48,59 @@ def create_app(
         'max_distance': initial_max_distance,
         'axis_filters': initial_axis_filters,
         'show_points': initial_show_points,
+        'show_point_labels': initial_show_point_labels,
     }
+
+    def serialize_label_catalog(point_labels) -> list[dict[str, object]]:
+        return [
+            {
+                'id': label_id,
+                'label': label,
+            }
+            for label_id, label in enumerate(point_labels.catalog)
+        ]
     
-    def get_cached_data():
-        """Load and cache raw point cloud data."""
+    def get_cached_data(include_labels: bool = False):
+        """Load and cache raw point cloud data, with labels only when needed."""
         cache = app.config['CACHE']
         if 'raw_points' not in cache:
             print(f"Loading point cloud: {file_path}")
-            load_result = load_point_cloud(file_path)
+            load_result = load_point_cloud(file_path, parse_labels=include_labels)
             points = load_result.points
             print_load_summary(load_result.summary)
 
             cache['raw_points'] = points
             cache['load_summary'] = load_result.summary
+            if load_result.point_labels is not None:
+                cache['raw_point_labels'] = load_result.point_labels
+                cache['load_summary_with_labels'] = load_result.summary
 
-        return cache['raw_points'], cache['load_summary']
+        if include_labels and 'raw_point_labels' not in cache:
+            load_result = load_point_cloud(file_path, parse_labels=True)
+            if load_result.point_labels is not None:
+                cache['raw_point_labels'] = load_result.point_labels
+                cache['load_summary_with_labels'] = load_result.summary
 
-    def get_filtered_data(axis_filters_text: Optional[str] = None):
+        point_labels = cache.get('raw_point_labels') if include_labels else None
+        load_summary = cache.get('load_summary_with_labels', cache['load_summary']) if include_labels else cache['load_summary']
+        return cache['raw_points'], point_labels, load_summary
+
+    def get_filtered_data(axis_filters_text: Optional[str] = None, include_labels: bool = False):
         """Get cached points and statistics for the current axis filters."""
-        raw_points, load_summary = get_cached_data()
+        raw_points, raw_point_labels, load_summary = get_cached_data(include_labels=include_labels)
         axis_filters = parse_axis_filters(axis_filters_text)
         axis_filters_key = normalize_axis_filters(axis_filters) or ''
         cache = app.config['CACHE']
         cache_key = ('filtered', axis_filters_key)
 
         if cache_key not in cache:
-            points = filter_points_by_axis(raw_points, axis_filters)
+            if axis_filters_key:
+                mask = compute_axis_filter_mask(raw_points, axis_filters)
+                points = raw_points[mask]
+            else:
+                mask = None
+                points = raw_points
+
             filtered_out_points = len(raw_points) - len(points)
             z_stats = print_z_statistics(points[:, 2])
             selection = {
@@ -79,6 +108,8 @@ def create_app(
                 'axis_filters': axis_filters_to_expressions(axis_filters),
                 'active_points': len(points),
                 'filtered_out_points': filtered_out_points,
+                'labeled_points': 0,
+                'unique_labels': 0,
                 'description': describe_axis_filters(axis_filters) if axis_filters_key else None,
             }
 
@@ -88,12 +119,31 @@ def create_app(
 
             cache[cache_key] = {
                 'points': points,
+                'mask': mask,
                 'z_stats': z_stats,
                 'selection': selection,
             }
 
         filtered = cache[cache_key]
-        return filtered['points'], filtered['z_stats'], load_summary, filtered['selection']
+        point_labels = None
+        selection = dict(filtered['selection'])
+
+        if include_labels:
+            if raw_point_labels is None:
+                raise RuntimeError('Point labels were requested but not loaded.')
+
+            label_cache_key = ('filtered-point-labels', axis_filters_key)
+            if label_cache_key not in cache:
+                if filtered['mask'] is None:
+                    cache[label_cache_key] = raw_point_labels
+                else:
+                    cache[label_cache_key] = filter_point_label_data(raw_point_labels, filtered['mask'])
+
+            point_labels = cache[label_cache_key]
+            selection['labeled_points'] = point_labels.labeled_points
+            selection['unique_labels'] = point_labels.unique_labels
+
+        return filtered['points'], point_labels, filtered['z_stats'], load_summary, selection
 
     def get_requested_axis_filters() -> Optional[str]:
         return request.args.get(
@@ -110,7 +160,7 @@ def create_app(
         cache_key = ('triangulation', axis_filters_key, max_distance)
         
         if cache_key not in cache:
-            points, _, _, _ = get_filtered_data(axis_filters_key)
+            points, _, _, _, _ = get_filtered_data(axis_filters_key)
             print(f"Creating triangulation (max_distance={max_distance}, axis_filters={axis_filters_key or 'none'})...")
             triangulation, mask = create_triangulation_with_filter(points, max_distance)
             cache[cache_key] = triangulation
@@ -121,7 +171,10 @@ def create_app(
     def index():
         """Render the main map view."""
         initial = app.config['INITIAL_SETTINGS']
-        points, z_stats, load_summary, selection = get_filtered_data(initial['axis_filters'])
+        points, _, z_stats, load_summary, selection = get_filtered_data(
+            initial['axis_filters'],
+            include_labels=initial['show_point_labels'],
+        )
         initial_axis_filters = parse_axis_filters(initial['axis_filters'])
         initial_axis_filter_x, initial_axis_filter_y, initial_axis_filter_z = axis_filters_to_expressions(initial_axis_filters)
         return render_template('map.html', 
@@ -135,6 +188,7 @@ def create_app(
                                initial_axis_filter_y=initial_axis_filter_y,
                                initial_axis_filter_z=initial_axis_filter_z,
                                initial_show_points=initial['show_points'],
+                               initial_show_point_labels=initial['show_point_labels'],
                                active_points=selection['active_points'],
                                filtered_out_points=selection['filtered_out_points'],
                                load_summary=load_summary)
@@ -143,7 +197,7 @@ def create_app(
     def get_bounds():
         """Get the bounding box of the data."""
         try:
-            points, z_stats, _, selection = get_filtered_data(get_requested_axis_filters())
+            points, _, z_stats, _, selection = get_filtered_data(get_requested_axis_filters())
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
 
@@ -157,38 +211,70 @@ def create_app(
             'z_max': z_stats['max'],
             'active_points': selection['active_points'],
             'filtered_out_points': selection['filtered_out_points'],
+            'labeled_points': selection['labeled_points'],
+            'unique_labels': selection['unique_labels'],
         })
     
     @app.route('/api/points')
     def get_points():
         """Get all points as GeoJSON."""
+        include_labels = request.args.get('include_labels', default='false').lower() == 'true'
+
         try:
-            points, _, _, _ = get_filtered_data(get_requested_axis_filters())
+            points, point_labels, _, _, selection = get_filtered_data(
+                get_requested_axis_filters(),
+                include_labels=include_labels,
+            )
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
         
         features = []
         for i, (x, y, z) in enumerate(points):
+            properties = {
+                "elevation": float(z),
+                "id": i,
+            }
+
+            if include_labels:
+                if point_labels is None:
+                    raise RuntimeError('Point labels were requested but are unavailable.')
+
+                label_id = int(point_labels.label_ids[i])
+                label = point_labels.catalog[label_id] if label_id >= 0 else None
+                properties['label_id'] = label_id if label_id >= 0 else None
+                properties['label'] = label
+
             features.append({
                 "type": "Feature",
-                "properties": {"elevation": float(z), "id": i},
+                "properties": properties,
                 "geometry": {
                     "type": "Point",
                     "coordinates": [float(x), float(y)]
                 }
             })
-        
-        return jsonify({
+
+        response = {
             "type": "FeatureCollection",
-            "features": features
-        })
+            "features": features,
+        }
+        if include_labels:
+            if point_labels is None:
+                raise RuntimeError('Point labels were requested but are unavailable.')
+
+            response['meta'] = {
+                'labeled_points': selection['labeled_points'],
+                'unique_labels': selection['unique_labels'],
+                'label_catalog': serialize_label_catalog(point_labels),
+            }
+
+        return jsonify(response)
     
     @app.route('/api/contours')
     def get_contours():
         """Generate and return contour lines as GeoJSON."""
         try:
             axis_filters_text = get_requested_axis_filters()
-            points, z_stats, _, selection = get_filtered_data(axis_filters_text)
+            points, _, z_stats, _, selection = get_filtered_data(axis_filters_text)
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
         
@@ -246,6 +332,8 @@ def create_app(
                 "major_levels": major_levels[:10] if len(major_levels) > 10 else major_levels,
                 "active_points": selection['active_points'],
                 "filtered_out_points": selection['filtered_out_points'],
+                "labeled_points": selection['labeled_points'],
+                "unique_labels": selection['unique_labels'],
                 "z_min": z_stats['min'],
                 "z_max": z_stats['max'],
             }
@@ -256,7 +344,7 @@ def create_app(
         """Get the triangulated mesh data for 3D visualization."""
         try:
             axis_filters_text = get_requested_axis_filters()
-            points, z_stats, _, _ = get_filtered_data(axis_filters_text)
+            points, _, z_stats, _, _ = get_filtered_data(axis_filters_text)
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
         
@@ -288,9 +376,14 @@ def create_app(
     @app.route('/api/export')
     def export_files():
         """Export contour lines and map, using the same logic as CLI."""
+        show_point_labels = request.args.get('show_point_labels', default='false').lower() == 'true'
+
         try:
             axis_filters_text = get_requested_axis_filters()
-            points, z_stats, _, _ = get_filtered_data(axis_filters_text)
+            points, point_labels, z_stats, _, _ = get_filtered_data(
+                axis_filters_text,
+                include_labels=show_point_labels,
+            )
         except ValueError as error:
             return jsonify({'error': str(error)}), 400
         
@@ -308,12 +401,14 @@ def create_app(
         exported_paths = run_export(
             file_path=file_path,
             points=points,
+            point_labels=point_labels,
             z_stats=z_stats,
             triangulation=triangulation,
             minor_interval=minor_interval,
             major_interval=major_interval,
             num_levels=num_levels,
             show_points=show_points,
+            show_point_labels=show_point_labels,
         )
         
         return jsonify({
@@ -333,6 +428,7 @@ def run_web_server(
     max_distance: Optional[float] = None,
     axis_filters: Optional[str] = None,
     show_points: bool = False,
+    show_point_labels: bool = False,
 ):
     """Start the web server for interactive viewing."""
     app = create_app(
@@ -342,6 +438,7 @@ def run_web_server(
         initial_max_distance=max_distance,
         initial_axis_filters=axis_filters,
         initial_show_points=show_points,
+        initial_show_point_labels=show_point_labels,
     )
     
     print(f"\nContour Viewer starting...")

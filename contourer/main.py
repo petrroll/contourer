@@ -25,12 +25,35 @@ class PointCloudLoadSummary:
     incomplete_lines: int
     invalid_number_lines: int
     decimal_comma_fixed_lines: int
+    labeled_points: int
+    unique_labels: int
+
+
+@dataclass(frozen=True)
+class PointLabelData:
+    label_ids: np.ndarray
+    catalog: tuple[str, ...]
+
+    @property
+    def labeled_points(self) -> int:
+        return int(np.count_nonzero(self.label_ids >= 0))
+
+    @property
+    def unique_labels(self) -> int:
+        return len(self.catalog)
+
+    def label_for_point(self, point_index: int) -> Optional[str]:
+        label_id = int(self.label_ids[point_index])
+        if label_id < 0:
+            return None
+        return self.catalog[label_id]
 
 
 @dataclass(frozen=True)
 class PointCloudLoadResult:
     points: np.ndarray
     summary: PointCloudLoadSummary
+    point_labels: Optional[PointLabelData]
 
 
 @dataclass(frozen=True)
@@ -56,6 +79,7 @@ AXIS_FILTER_OPERATORS = {
     '==': np.equal,
     '!=': np.not_equal,
 }
+TEXT_DECODINGS = ('utf-8', 'cp1250', 'latin-1')
 
 
 def parse_axis_filter(expression: str, axis_name: str) -> Optional[AxisFilter]:
@@ -131,6 +155,14 @@ def filter_points_by_axis(
     if not any(axis_filters):
         return points
 
+    mask = compute_axis_filter_mask(points, axis_filters)
+    return points[mask]
+
+
+def compute_axis_filter_mask(
+    points: np.ndarray,
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> np.ndarray:
     mask = np.ones(len(points), dtype=bool)
     for axis_index, axis_filter in enumerate(axis_filters):
         if axis_filter is None:
@@ -138,14 +170,79 @@ def filter_points_by_axis(
         operator = AXIS_FILTER_OPERATORS[axis_filter.operator_symbol]
         mask &= operator(points[:, axis_index], axis_filter.threshold)
 
-    filtered_points = points[mask]
-    if len(filtered_points) < 3:
+    filtered_points = int(np.count_nonzero(mask))
+    if filtered_points < 3:
         raise ValueError(
-            f"Axis filters {describe_axis_filters(axis_filters)} kept only {len(filtered_points)} points. "
+            f"Axis filters {describe_axis_filters(axis_filters)} kept only {filtered_points} points. "
             "Need at least 3 points after filtering."
         )
 
-    return filtered_points
+    return mask
+
+
+def build_point_label_data(point_labels: list[Optional[str]]) -> PointLabelData:
+    label_ids = np.full(len(point_labels), -1, dtype=int)
+    catalog = []
+    label_to_id = {}
+
+    for point_index, point_label in enumerate(point_labels):
+        normalized_label = normalize_point_label(point_label)
+        if normalized_label is None:
+            continue
+
+        label_id = label_to_id.get(normalized_label)
+        if label_id is None:
+            label_id = len(catalog)
+            label_to_id[normalized_label] = label_id
+            catalog.append(normalized_label)
+
+        label_ids[point_index] = label_id
+
+    return PointLabelData(label_ids=label_ids, catalog=tuple(catalog))
+
+
+def filter_point_label_data(point_labels: PointLabelData, mask: np.ndarray) -> PointLabelData:
+    if len(point_labels.label_ids) != len(mask):
+        raise ValueError("Point label metadata is not aligned with the selected points.")
+
+    filtered_label_ids = point_labels.label_ids[mask]
+    if filtered_label_ids.size == 0:
+        return PointLabelData(label_ids=filtered_label_ids.astype(int, copy=False), catalog=())
+
+    compacted_label_ids = np.full(len(filtered_label_ids), -1, dtype=int)
+    compacted_catalog = []
+    label_id_remap = {}
+
+    for point_index, label_id in enumerate(filtered_label_ids):
+        label_id = int(label_id)
+        if label_id < 0:
+            continue
+
+        compacted_label_id = label_id_remap.get(label_id)
+        if compacted_label_id is None:
+            compacted_label_id = len(compacted_catalog)
+            label_id_remap[label_id] = compacted_label_id
+            compacted_catalog.append(point_labels.catalog[label_id])
+
+        compacted_label_ids[point_index] = compacted_label_id
+
+    return PointLabelData(label_ids=compacted_label_ids, catalog=tuple(compacted_catalog))
+
+
+def filter_point_data_by_axis(
+    points: np.ndarray,
+    point_labels: Optional[PointLabelData],
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> tuple[np.ndarray, Optional[PointLabelData]]:
+    if not any(axis_filters):
+        return points, point_labels
+
+    mask = compute_axis_filter_mask(points, axis_filters)
+    filtered_points = points[mask]
+    if point_labels is None:
+        return filtered_points, None
+
+    return filtered_points, filter_point_label_data(point_labels, mask)
 
 
 def _parse_numeric_token(token: bytes) -> tuple[Optional[float], bool]:
@@ -162,6 +259,24 @@ def _parse_numeric_token(token: bytes) -> tuple[Optional[float], bool]:
         return None, decimal_comma_fixed
 
 
+def decode_text_value(raw_value: bytes) -> str:
+    for encoding in TEXT_DECODINGS:
+        try:
+            return raw_value.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+
+    return raw_value.decode('utf-8', errors='replace')
+
+
+def normalize_point_label(point_label: Optional[str]) -> Optional[str]:
+    if point_label is None:
+        return None
+
+    normalized_label = ' '.join(point_label.split())
+    return normalized_label or None
+
+
 def _is_integer_token(token: bytes) -> bool:
     try:
         text = token.decode('ascii')
@@ -174,28 +289,34 @@ def _is_integer_token(token: bytes) -> bool:
     return bool(text) and text.isdigit()
 
 
-def _parse_point_line(line: bytes) -> tuple[Optional[tuple[float, float, float]], str, bool]:
+def _parse_point_line(
+    line: bytes,
+    parse_label: bool = False,
+) -> tuple[Optional[tuple[float, float, float]], Optional[str], str, bool]:
     """Parse a single point-cloud line.
 
-    Accepts either `X Y Z` or `ID X Y Z` style rows and ignores any
-    additional columns after `Z`.
+    Accepts either `X Y Z` or `ID X Y Z` style rows. Additional columns after
+    `Z` are only decoded as optional point label text when `parse_label` is
+    enabled.
     """
     stripped = line.strip()
     if stripped.startswith(b'\xef\xbb\xbf'):
         stripped = stripped[3:]
 
     if not stripped:
-        return None, 'blank', False
+        return None, None, 'blank', False
 
     columns = stripped.split()
     if len(columns) < 3:
-        return None, 'incomplete', False
+        return None, None, 'incomplete', False
 
     value_columns = columns[:3]
+    label_column_start = 3
     if len(columns) >= 4 and _is_integer_token(columns[0]):
         id_style_values = columns[1:4]
         if all(_parse_numeric_token(token)[0] is not None for token in id_style_values):
             value_columns = id_style_values
+            label_column_start = 4
 
     values = []
     decimal_comma_fixed = False
@@ -204,12 +325,15 @@ def _parse_point_line(line: bytes) -> tuple[Optional[tuple[float, float, float]]
         if token_decimal_comma_fixed:
             decimal_comma_fixed = True
         if value is None:
-            return None, 'invalid_number', decimal_comma_fixed
+            return None, None, 'invalid_number', decimal_comma_fixed
         values.append(value)
 
     x, y, z = values
+    label_text = None
+    if parse_label and len(columns) > label_column_start:
+        label_text = normalize_point_label(decode_text_value(b' '.join(columns[label_column_start:])))
 
-    return (x, y, z), 'loaded', decimal_comma_fixed
+    return (x, y, z), label_text, 'loaded', decimal_comma_fixed
 
 
 def print_load_summary(summary: PointCloudLoadSummary) -> None:
@@ -218,6 +342,9 @@ def print_load_summary(summary: PointCloudLoadSummary) -> None:
     print(f"  Total lines:            {summary.total_lines}")
     print(f"  Loaded points:          {summary.loaded_points}")
     print(f"  Skipped lines:          {summary.skipped_lines}")
+    if summary.labeled_points:
+        print(f"  Labeled points:         {summary.labeled_points}")
+        print(f"  Unique labels:          {summary.unique_labels}")
 
     if summary.decimal_comma_fixed_lines:
         print(f"  Decimal comma fixed:    {summary.decimal_comma_fixed_lines}")
@@ -229,15 +356,17 @@ def print_load_summary(summary: PointCloudLoadSummary) -> None:
         print(f"  Invalid numeric lines:  {summary.invalid_number_lines}")
 
 
-def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
+def load_point_cloud(filepath: Path, parse_labels: bool = False) -> PointCloudLoadResult:
     """Load point cloud data from file.
 
     File format: Either X Y Z or ID X Y Z, space-separated.
-    Additional columns after Z are ignored. Empty, incomplete, or malformed
+    Additional columns after Z are loaded as an optional point label only when
+    `parse_labels` is enabled. Empty, incomplete, or malformed
     rows are skipped, and decimal commas in numeric values are normalized to
     dots when possible.
     """
     points = []
+    point_labels = [] if parse_labels else None
     total_lines = 0
     blank_lines = 0
     incomplete_lines = 0
@@ -247,13 +376,15 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
     with open(filepath, 'rb') as handle:
         for line in handle:
             total_lines += 1
-            point, status, decimal_comma_fixed = _parse_point_line(line)
+            point, point_label, status, decimal_comma_fixed = _parse_point_line(line, parse_label=parse_labels)
 
             if decimal_comma_fixed:
                 decimal_comma_fixed_lines += 1
 
             if status == 'loaded':
                 points.append(point)
+                if point_labels is not None:
+                    point_labels.append(point_label)
                 continue
 
             if status == 'blank':
@@ -264,6 +395,7 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
                 invalid_number_lines += 1
 
     data = np.asarray(points, dtype=float) if points else np.empty((0, 3), dtype=float)
+    label_data = build_point_label_data(point_labels) if point_labels is not None else None
 
     summary = PointCloudLoadSummary(
         total_lines=total_lines,
@@ -273,6 +405,8 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
         incomplete_lines=incomplete_lines,
         invalid_number_lines=invalid_number_lines,
         decimal_comma_fixed_lines=decimal_comma_fixed_lines,
+        labeled_points=label_data.labeled_points if label_data is not None else 0,
+        unique_labels=label_data.unique_labels if label_data is not None else 0,
     )
 
     if len(data) < 3:
@@ -280,7 +414,7 @@ def load_point_cloud(filepath: Path) -> PointCloudLoadResult:
             f"Loaded only {len(data)} valid points from '{filepath}'. Need at least 3 valid points."
         )
 
-    return PointCloudLoadResult(points=data, summary=summary)
+    return PointCloudLoadResult(points=data, summary=summary, point_labels=label_data)
 
 
 def compute_triangle_edge_lengths(points_xy: np.ndarray, triangles: np.ndarray) -> np.ndarray:
@@ -477,7 +611,9 @@ def create_visualization(
     levels: list[float],
     output_path: Path,
     major_levels: Optional[list[float]] = None,
-    show_points: bool = False
+    show_points: bool = False,
+    point_labels: Optional[PointLabelData] = None,
+    show_point_labels: bool = False,
 ) -> None:
     """Create top-down contour map visualization.
     
@@ -488,6 +624,8 @@ def create_visualization(
         output_path: Path to save the image
         major_levels: Optional list of major levels to draw with thicker lines
         show_points: Whether to show original data points on the map
+        point_labels: Optional point-label catalog aligned with the triangulation points
+        show_point_labels: Whether to annotate labeled points on the map
     """
     fig, ax = plt.subplots(figsize=(12, 10))
     
@@ -514,6 +652,31 @@ def create_visualization(
     if show_points:
         ax.scatter(triangulation.x, triangulation.y, c=z_values, cmap='terrain', 
                    s=10, edgecolors='black', linewidths=0.3, alpha=0.8, zorder=5)
+
+    if show_point_labels and point_labels is not None and point_labels.labeled_points:
+        if len(point_labels.label_ids) != len(triangulation.x):
+            raise ValueError("Point labels are not aligned with the visualization points.")
+
+        for point_index, label_id in enumerate(point_labels.label_ids):
+            label_id = int(label_id)
+            if label_id < 0:
+                continue
+
+            ax.annotate(
+                point_labels.catalog[label_id],
+                (triangulation.x[point_index], triangulation.y[point_index]),
+                xytext=(4, 4),
+                textcoords='offset points',
+                fontsize=6,
+                color='#1f1f1f',
+                bbox={
+                    'boxstyle': 'round,pad=0.15',
+                    'facecolor': 'white',
+                    'edgecolor': '#c7c7c7',
+                    'alpha': 0.75,
+                },
+                zorder=6,
+            )
     
     # Add colorbar
     cbar = plt.colorbar(contourf, ax=ax, label='Elevation (Z)')
@@ -730,12 +893,14 @@ def export_contours_dxf(
 def run_export(
     file_path: Path,
     points: np.ndarray,
+    point_labels: Optional[PointLabelData],
     z_stats: dict,
     triangulation: mtri.Triangulation,
     minor_interval: Optional[float] = None,
     major_interval: Optional[float] = None,
     num_levels: int = 30,
     show_points: bool = False,
+    show_point_labels: bool = False,
     formats: Optional[set[str]] = None,
 ) -> dict[str, Path]:
     """Run the full export workflow for contour generation.
@@ -745,12 +910,14 @@ def run_export(
     Args:
         file_path: Input file path (used to derive output paths)
         points: Point cloud data (N, 3) array
+        point_labels: Optional point labels aligned with points
         z_stats: Z statistics dictionary from print_z_statistics
         triangulation: Pre-computed triangulation
         minor_interval: Interval for minor contour lines
         major_interval: Interval for major contour lines
         num_levels: Number of auto-generated levels (if no interval specified)
         show_points: Whether to show points on PDF visualization
+        show_point_labels: Whether to show point labels on PDF visualization
         formats: Set of formats to export ('vrs', 'geojson', 'dxf', 'pdf'), or None for all
     
     Returns:
@@ -793,7 +960,16 @@ def run_export(
     # Create visualization PDF
     if 'pdf' in selected_formats:
         print("Creating visualization...")
-        create_visualization(triangulation, points[:, 2], levels, output_paths['pdf'], major_levels, show_points)
+        create_visualization(
+            triangulation,
+            points[:, 2],
+            levels,
+            output_paths['pdf'],
+            major_levels,
+            show_points,
+            point_labels,
+            show_point_labels,
+        )
     
     # Return only the paths that were actually exported
     return {fmt: output_paths[fmt] for fmt in selected_formats}
@@ -806,7 +982,7 @@ def main():
     parser.add_argument(
         "file_path", 
         type=Path, 
-        help="Path to point cloud file (ID X Y Z format)"
+        help="Path to point cloud file (X Y Z or ID X Y Z, with optional trailing label text)"
     )
     parser.add_argument(
         "--levels",
@@ -843,6 +1019,11 @@ def main():
         "--show-points",
         action="store_true",
         help="Show original data points on the visualization"
+    )
+    parser.add_argument(
+        "--show-point-labels",
+        action="store_true",
+        help="Show parsed point labels on the PDF visualization and in the web viewer"
     )
     parser.add_argument(
         "--web",
@@ -887,6 +1068,7 @@ def main():
             max_distance=args.max_distance,
             axis_filters=normalized_axis_filters,
             show_points=args.show_points,
+            show_point_labels=args.show_point_labels,
         )
         return 0
     
@@ -896,20 +1078,22 @@ def main():
     print(f"Loading point cloud: {args.file_path}")
 
     # Load point cloud data
-    load_result = load_point_cloud(args.file_path)
+    load_result = load_point_cloud(args.file_path, parse_labels=args.show_point_labels)
     points = load_result.points
+    point_labels = load_result.point_labels
     print_load_summary(load_result.summary)
 
     if normalized_axis_filters is not None:
         print(f"\nApplying axis filters: {describe_axis_filters(axis_filters)}")
         try:
-            filtered_points = filter_points_by_axis(points, axis_filters)
+            filtered_points, filtered_point_labels = filter_point_data_by_axis(points, point_labels, axis_filters)
         except ValueError as error:
             print(f"Error: {error}")
             return 1
 
         print(f"Kept {len(filtered_points)} of {len(points)} loaded points after axis filtering")
         points = filtered_points
+        point_labels = filtered_point_labels
     
     # Print Z statistics
     z_stats = print_z_statistics(points[:, 2])
@@ -936,11 +1120,13 @@ def main():
     run_export(
         file_path=args.file_path,
         points=points,
+        point_labels=point_labels,
         z_stats=z_stats,
         triangulation=triangulation,
         minor_interval=args.minor_interval,
         major_interval=args.major_interval,
         show_points=args.show_points,
+        show_point_labels=args.show_point_labels,
         formats=selected_formats,
     )
     
