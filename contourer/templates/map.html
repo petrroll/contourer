@@ -77,7 +77,7 @@
             margin-bottom: 5px;
         }
         
-        input[type="number"], select {
+        input[type="number"], input[type="text"], select {
             width: 100%;
             padding: 10px;
             border: 1px solid #ccc;
@@ -87,9 +87,55 @@
             font-size: 0.95em;
         }
         
-        input[type="number"]:focus, select:focus {
+        input[type="number"]:focus, input[type="text"]:focus, select:focus {
             outline: none;
             border-color: #4caf50;
+        }
+
+        .axis-filter-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .axis-filter-example {
+            margin-top: 8px;
+            padding: 10px;
+            border: 1px solid #e2e2e2;
+            border-radius: 5px;
+            background: #fafafa;
+        }
+
+        .axis-filter-example-title {
+            margin-bottom: 8px;
+            font-size: 0.78em;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .axis-filter-example-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .axis-filter-example-value {
+            padding: 10px;
+            border: 1px dashed #c9c9c9;
+            border-radius: 5px;
+            background: #fff;
+            color: #666;
+            text-align: center;
+            font-size: 0.95em;
+        }
+
+        .control-hint {
+            margin-top: 6px;
+            font-size: 0.78em;
+            line-height: 1.4;
+            color: #777;
         }
         
         .checkbox-group {
@@ -515,7 +561,15 @@
                     </div>
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="loadedPoints">Loaded Points</span>
-                        <span class="stats-value">{{ num_points }}</span>
+                        <span class="stats-value" id="stat-loaded-points">{{ load_summary.loaded_points }}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="activePoints">Active Points</span>
+                        <span class="stats-value" id="stat-active-points">{{ active_points }}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stats-label" data-i18n="filteredOutPoints">Filtered Out</span>
+                        <span class="stats-value" id="stat-filtered-out-points">{{ filtered_out_points }}</span>
                     </div>
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="skippedLines">Skipped Lines</span>
@@ -547,11 +601,11 @@
                     {% endif %}
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="zMin">Z Min</span>
-                        <span class="stats-value">{{ "%.2f"|format(z_min) }}</span>
+                        <span class="stats-value" id="stat-z-min">{{ "%.2f"|format(z_min) }}</span>
                     </div>
                     <div class="stats-row">
                         <span class="stats-label" data-i18n="zMax">Z Max</span>
-                        <span class="stats-value">{{ "%.2f"|format(z_max) }}</span>
+                        <span class="stats-value" id="stat-z-max">{{ "%.2f"|format(z_max) }}</span>
                     </div>
                 </div>
             </div>
@@ -572,6 +626,25 @@
                 <div class="control-group">
                     <label for="max-distance" data-i18n="maxDistance">Max Edge Distance (0 = auto)</label>
                     <input type="number" id="max-distance" value="{{ initial_max_distance if initial_max_distance else 0 }}" min="0" step="0.5">
+                </div>
+
+                <div class="control-group">
+                    <label data-i18n="axisFilters">Axis Filters (X, Y, Z)</label>
+                    <div class="axis-filter-grid">
+                        <input type="text" id="axis-filter-x" value="{{ initial_axis_filter_x }}" placeholder="" spellcheck="false" aria-label="X axis filter">
+                        <input type="text" id="axis-filter-y" value="{{ initial_axis_filter_y }}" placeholder="" spellcheck="false" aria-label="Y axis filter">
+                        <input type="text" id="axis-filter-z" value="{{ initial_axis_filter_z }}" placeholder="" spellcheck="false" aria-label="Z axis filter">
+                    </div>
+                    <div class="control-hint" data-i18n="axisFiltersHelp">Filters are empty by default, so all values are kept. Use &gt;, &gt;=, &lt;, &lt;=, ==, or != only when you want to limit an axis.</div>
+                    <div class="axis-filter-example" aria-hidden="true">
+                        <div class="axis-filter-example-title" data-i18n="axisFiltersExampleTitle">Example Filled Values</div>
+                        <div class="axis-filter-example-grid">
+                            <div class="axis-filter-example-value">&gt;0</div>
+                            <div class="axis-filter-example-value">&gt;0</div>
+                            <div class="axis-filter-example-value">&gt;0</div>
+                        </div>
+                    </div>
+                    <div class="control-hint" data-i18n="axisFiltersExample">Example: fill all three fields with &gt;0 to keep only positive coordinates.</div>
                 </div>
             </div>
             
@@ -659,7 +732,7 @@
             <div class="section">
                 <h2 data-i18n="commandLine">Command Line</h2>
                 <div class="command-container">
-                    <div class="command-display" id="command-display">uv run contour {{ filename }}</div>
+                    <div class="command-display" id="command-display">uv run contourer &quot;{{ filename }}&quot;</div>
                     <button class="copy-btn" id="copy-btn" title="Copy to clipboard">
                         <svg viewBox="0 0 24 24" id="copy-icon">
                             <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
@@ -728,6 +801,8 @@
                 dataInfo: 'Data Info',
                 totalLines: 'Total Lines',
                 loadedPoints: 'Loaded Points',
+                activePoints: 'Active Points',
+                filteredOutPoints: 'Filtered Out',
                 skippedLines: 'Skipped Lines',
                 decimalCommaFixed: 'Decimal Comma Fixed',
                 blankLines: 'Blank Lines',
@@ -739,6 +814,10 @@
                 minorInterval: 'Minor Interval (m)',
                 majorInterval: 'Major Interval (m)',
                 maxDistance: 'Max Edge Distance (0 = auto)',
+                axisFilters: 'Axis Filters (X, Y, Z)',
+                axisFiltersHelp: 'Filters are empty by default, so all values are kept. Use >, >=, <, <=, ==, or != only when you want to limit an axis.',
+                axisFiltersExampleTitle: 'Example Filled Values',
+                axisFiltersExample: 'Example: fill all three fields with >0 to keep only positive coordinates.',
                 displayOptions: 'Display Options',
                 showDataPoints: 'Show Data Points',
                 showElevationLabels: 'Show Elevation Labels',
@@ -788,6 +867,8 @@
                 dataInfo: 'Informace o datech',
                 totalLines: 'Řádků celkem',
                 loadedPoints: 'Načtené body',
+                activePoints: 'Použité body',
+                filteredOutPoints: 'Odfiltrované body',
                 skippedLines: 'Přeskočené řádky',
                 decimalCommaFixed: 'Řádky s opravenou čárkou',
                 blankLines: 'Prázdné řádky',
@@ -799,6 +880,10 @@
                 minorInterval: 'Vedlejší interval (m)',
                 majorInterval: 'Hlavní interval (m)',
                 maxDistance: 'Max. vzdálenost hrany (0 = auto)',
+                axisFilters: 'Filtry os (X, Y, Z)',
+                axisFiltersHelp: 'Filtry jsou ve výchozím stavu prázdné, takže se ponechají všechny hodnoty. Operátory >, >=, <, <=, == nebo != použijte jen tehdy, když chcete osu omezit.',
+                axisFiltersExampleTitle: 'Příklad vyplněných hodnot',
+                axisFiltersExample: 'Příklad: vyplňte do všech tří polí >0 a zůstanou jen kladné souřadnice.',
                 displayOptions: 'Možnosti zobrazení',
                 showDataPoints: 'Zobrazit datové body',
                 showElevationLabels: 'Zobrazit popisky výšek',
@@ -888,6 +973,9 @@
                 minorInterval: document.getElementById('minor-interval').value,
                 majorInterval: document.getElementById('major-interval').value,
                 maxDistance: document.getElementById('max-distance').value,
+                axisFilterX: document.getElementById('axis-filter-x').value,
+                axisFilterY: document.getElementById('axis-filter-y').value,
+                axisFilterZ: document.getElementById('axis-filter-z').value,
                 showPoints: document.getElementById('show-points').checked,
                 showLabels: document.getElementById('show-labels').checked,
                 colorScheme: document.getElementById('color-scheme').value,
@@ -903,19 +991,64 @@
             if (stored) {
                 try {
                     const settings = JSON.parse(stored);
-                    if (settings.minorInterval) document.getElementById('minor-interval').value = settings.minorInterval;
-                    if (settings.majorInterval) document.getElementById('major-interval').value = settings.majorInterval;
-                    if (settings.maxDistance) document.getElementById('max-distance').value = settings.maxDistance;
+                    if (settings.minorInterval !== undefined) document.getElementById('minor-interval').value = settings.minorInterval;
+                    if (settings.majorInterval !== undefined) document.getElementById('major-interval').value = settings.majorInterval;
+                    if (settings.maxDistance !== undefined) document.getElementById('max-distance').value = settings.maxDistance;
+                    if (settings.axisFilterX !== undefined) document.getElementById('axis-filter-x').value = settings.axisFilterX;
+                    if (settings.axisFilterY !== undefined) document.getElementById('axis-filter-y').value = settings.axisFilterY;
+                    if (settings.axisFilterZ !== undefined) document.getElementById('axis-filter-z').value = settings.axisFilterZ;
                     if (settings.showPoints !== undefined) document.getElementById('show-points').checked = settings.showPoints;
                     if (settings.showLabels !== undefined) document.getElementById('show-labels').checked = settings.showLabels;
-                    if (settings.colorScheme) document.getElementById('color-scheme').value = settings.colorScheme;
+                    if (settings.colorScheme !== undefined) document.getElementById('color-scheme').value = settings.colorScheme;
                     if (settings.showContours3D !== undefined) document.getElementById('show-contours-3d').checked = settings.showContours3D;
                     if (settings.showWireframe !== undefined) document.getElementById('show-wireframe').checked = settings.showWireframe;
-                    if (settings.zScale) document.getElementById('z-scale').value = settings.zScale;
+                    if (settings.zScale !== undefined) document.getElementById('z-scale').value = settings.zScale;
                 } catch (e) {
                     console.warn('Failed to load settings:', e);
                 }
             }
+        }
+
+        function getAxisFiltersValue() {
+            return [
+                document.getElementById('axis-filter-x').value.trim(),
+                document.getElementById('axis-filter-y').value.trim(),
+                document.getElementById('axis-filter-z').value.trim(),
+            ].join(',');
+        }
+
+        function appendAxisFiltersParam(params) {
+            params.set('axis_filters', getAxisFiltersValue());
+        }
+
+        function quoteShellArgument(value) {
+            return "'" + value.replace(/'/g, "'\\''") + "'";
+        }
+
+        function updateDataInfo(meta) {
+            if (meta.active_points !== undefined) {
+                document.getElementById('stat-active-points').textContent = meta.active_points;
+            }
+            if (meta.filtered_out_points !== undefined) {
+                document.getElementById('stat-filtered-out-points').textContent = meta.filtered_out_points;
+            }
+            if (meta.z_min !== undefined) {
+                zMin = meta.z_min;
+                document.getElementById('stat-z-min').textContent = meta.z_min.toFixed(2);
+            }
+            if (meta.z_max !== undefined) {
+                zMax = meta.z_max;
+                document.getElementById('stat-z-max').textContent = meta.z_max.toFixed(2);
+            }
+        }
+
+        async function fetchJson(url) {
+            const response = await fetch(url);
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.error || response.statusText);
+            }
+            return data;
         }
         
         // Color schemes for contours based on elevation
@@ -975,8 +1108,10 @@
         async function initializeMap() {
             try {
                 setStatus(t('loadingBounds'), 'loading');
-                const response = await fetch('/api/bounds');
-                bounds = await response.json();
+                const params = new URLSearchParams();
+                appendAxisFiltersParam(params);
+                bounds = await fetchJson(`/api/bounds?${params}`);
+                updateDataInfo(bounds);
                 
                 // Set map bounds (Leaflet Simple CRS uses [y, x] for LatLng)
                 const corner1 = L.latLng(bounds.y_min, bounds.x_min);
@@ -1010,12 +1145,12 @@
             try {
                 // Build query params
                 const params = new URLSearchParams();
+                appendAxisFiltersParam(params);
                 if (minorInterval > 0) params.append('minor_interval', minorInterval);
                 if (majorInterval > 0) params.append('major_interval', majorInterval);
                 if (maxDistance > 0) params.append('max_distance', maxDistance);
                 
-                const response = await fetch(`/api/contours?${params}`);
-                const data = await response.json();
+                const data = await fetchJson(`/api/contours?${params}`);
                 
                 // Remove old layers
                 if (contourLayer) map.removeLayer(contourLayer);
@@ -1072,60 +1207,88 @@
                 }
                 
                 // Update stats
+                updateDataInfo(data.meta);
                 document.getElementById('stat-levels').textContent = data.meta.num_levels;
                 document.getElementById('stat-segments').textContent = data.meta.num_segments;
+
+                if (document.getElementById('show-points').checked) {
+                    await refreshPointsLayer(false);
+                } else if (pointsLayer) {
+                    map.removeLayer(pointsLayer);
+                    pointsLayer = null;
+                }
                 
                 setStatus(t('loadedSegments', { count: data.meta.num_segments }), 'success');
+                return true;
                 
             } catch (error) {
                 setStatus(t('error', { message: error.message }), 'error');
                 console.error(error);
+                return false;
             }
         }
         
+        function clearPointsLayer() {
+            if (pointsLayer) {
+                map.removeLayer(pointsLayer);
+                pointsLayer = null;
+            }
+        }
+
+        async function refreshPointsLayer(updateStatus = true) {
+            clearPointsLayer();
+
+            if (!document.getElementById('show-points').checked) {
+                return true;
+            }
+
+            if (updateStatus) {
+                setStatus(t('loadingPoints'), 'loading');
+            }
+
+            try {
+                const params = new URLSearchParams();
+                appendAxisFiltersParam(params);
+                const data = await fetchJson(`/api/points?${params}`);
+
+                pointsLayer = L.geoJSON(data, {
+                    pointToLayer: (feature, latlng) => {
+                        const z = feature.properties.elevation;
+                        const colorFn = colorSchemes[document.getElementById('color-scheme').value];
+                        return L.circleMarker(latlng, {
+                            radius: 3,
+                            fillColor: colorFn(z, zMin, zMax),
+                            color: '#333',
+                            weight: 0.5,
+                            fillOpacity: 0.8
+                        });
+                    },
+                    onEachFeature: (feature, layer) => {
+                        const [x, y] = feature.geometry.coordinates;
+                        const z = feature.properties.elevation.toFixed(3);
+                        layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m`, {
+                            className: 'elevation-tooltip'
+                        });
+                    }
+                }).addTo(map);
+
+                if (updateStatus) {
+                    setStatus(t('pointsLoaded'), 'success');
+                }
+                return true;
+            } catch (error) {
+                setStatus(t('errorLoadingPoints', { message: error.message }), 'error');
+                console.error(error);
+                return false;
+            }
+        }
+
         // Toggle data points visibility
         async function togglePoints() {
-            const showPoints = document.getElementById('show-points').checked;
-            
-            if (showPoints && !pointsLayer) {
-                setStatus(t('loadingPoints'), 'loading');
-                try {
-                    const response = await fetch('/api/points');
-                    const data = await response.json();
-                    
-                    pointsLayer = L.geoJSON(data, {
-                        pointToLayer: (feature, latlng) => {
-                            const z = feature.properties.elevation;
-                            const colorFn = colorSchemes[document.getElementById('color-scheme').value];
-                            return L.circleMarker(latlng, {
-                                radius: 3,
-                                fillColor: colorFn(z, zMin, zMax),
-                                color: '#333',
-                                weight: 0.5,
-                                fillOpacity: 0.8
-                            });
-                        },
-                        onEachFeature: (feature, layer) => {
-                            const [x, y] = feature.geometry.coordinates;
-                            const z = feature.properties.elevation.toFixed(3);
-                            layer.bindTooltip(`X: ${x.toFixed(3)}<br>Y: ${y.toFixed(3)}<br>Z: ${z}m`, {
-                                className: 'elevation-tooltip'
-                            });
-                        }
-                    });
-                    setStatus(t('pointsLoaded'), 'success');
-                } catch (error) {
-                    setStatus(t('errorLoadingPoints', { message: error.message }), 'error');
-                    return;
-                }
-            }
-            
-            if (pointsLayer) {
-                if (showPoints) {
-                    pointsLayer.addTo(map);
-                } else {
-                    map.removeLayer(pointsLayer);
-                }
+            if (document.getElementById('show-points').checked) {
+                await refreshPointsLayer();
+            } else {
+                clearPointsLayer();
             }
         }
         
@@ -1134,6 +1297,7 @@
             const minorInterval = parseFloat(document.getElementById('minor-interval').value);
             const majorInterval = parseFloat(document.getElementById('major-interval').value);
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
+            const axisFilters = getAxisFiltersValue();
             
             let cmd = 'uv run contourer "{{ filename }}"';
             
@@ -1145,6 +1309,9 @@
             }
             if (maxDistance > 0) {
                 cmd += ` --max-distance ${maxDistance}`;
+            }
+            if (axisFilters.replace(/,/g, '').length > 0) {
+                cmd += ` --axis-filters ${quoteShellArgument(axisFilters)}`;
             }
             
             return cmd;
@@ -1203,6 +1370,7 @@
             const showPoints = document.getElementById('show-points').checked;
             
             const params = new URLSearchParams();
+            appendAxisFiltersParam(params);
             if (minorInterval > 0) params.set('minor_interval', minorInterval);
             if (majorInterval > 0) params.set('major_interval', majorInterval);
             if (maxDistance > 0) params.set('max_distance', maxDistance);
@@ -1380,11 +1548,11 @@
             
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             const params = new URLSearchParams();
+            appendAxisFiltersParam(params);
             if (maxDistance > 0) params.append('max_distance', maxDistance);
             
             try {
-                const response = await fetch(`/api/mesh?${params}`);
-                meshData = await response.json();
+                meshData = await fetchJson(`/api/mesh?${params}`);
                 
                 create3DMesh();
                 setStatus(t('loaded3D'), 'success');
@@ -1649,13 +1817,13 @@
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             
             const params = new URLSearchParams();
+            appendAxisFiltersParam(params);
             if (minorInterval > 0) params.append('minor_interval', minorInterval);
             if (majorInterval > 0) params.append('major_interval', majorInterval);
             if (maxDistance > 0) params.append('max_distance', maxDistance);
             
             try {
-                const response = await fetch(`/api/contours?${params}`);
-                const data = await response.json();
+                const data = await fetchJson(`/api/contours?${params}`);
                 
                 contourLinesObject = new THREE.Group();
                 
@@ -1875,23 +2043,25 @@
         }
         
         // Event listeners
-        document.getElementById('update-btn').addEventListener('click', () => {
+        document.getElementById('update-btn').addEventListener('click', async () => {
             saveSettings();
-            updateContours();
             updateCommandLine();
-            update3DMesh();
+            const updated = await updateContours();
+            if (updated) {
+                reload3DMesh();
+            }
         });
-        document.getElementById('show-points').addEventListener('change', () => {
+        document.getElementById('show-points').addEventListener('change', async () => {
             saveSettings();
-            togglePoints();
+            await togglePoints();
         });
-        document.getElementById('show-labels').addEventListener('change', () => {
+        document.getElementById('show-labels').addEventListener('change', async () => {
             saveSettings();
-            updateContours();
+            await updateContours();
         });
-        document.getElementById('color-scheme').addEventListener('change', () => {
+        document.getElementById('color-scheme').addEventListener('change', async () => {
             saveSettings();
-            updateContours();
+            await updateContours();
             update3DMesh();
         });
         document.getElementById('language-select').addEventListener('change', (e) => {
@@ -1927,6 +2097,18 @@
             saveSettings();
             updateCommandLine();
         });
+        document.getElementById('axis-filter-x').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
+        document.getElementById('axis-filter-y').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
+        document.getElementById('axis-filter-z').addEventListener('change', () => {
+            saveSettings();
+            updateCommandLine();
+        });
         document.getElementById('max-distance').addEventListener('change', () => {
             saveSettings();
             updateCommandLine();
@@ -1938,11 +2120,6 @@
         loadLanguage();
         updateCommandLine();
         initializeMap();
-        
-        // Apply show-points if it was saved as checked
-        if (document.getElementById('show-points').checked) {
-            togglePoints();
-        }
     </script>
 </body>
 </html>

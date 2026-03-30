@@ -26,6 +26,7 @@ By default, all formats are exported. Use `--formats` to select specific formats
 | `--minor-interval 0.2` | Interval for minor contour lines (overrides --levels) |
 | `--major-interval 1.0` | Interval for major contour lines (visualization only, defaults to 5× minor) |
 | `--max-distance 5.0` | Max triangle edge length filter (default: 1.5× median) |
+| `--axis-filters '>0,>0,>0'` | Comma-separated X,Y,Z filters. Quote the value so your shell does not treat `>` as redirection. Leave an axis empty to skip it, for example `'>0,,>450'`. |
 | `--formats pdf,vrs,...` | Comma-separated export formats: pdf, vrs, geojson, dxf (default: all) |
 | `--show-points` | Show original data points on the visualization |
 | `--web` | Launch interactive browser-based viewer |
@@ -45,6 +46,9 @@ uv run contourer data/zakazka-body.txt --formats dxf
 
 # Major and minor contours at 0.2 and 1 meter
 uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1
+
+# Keep only points with positive X, Y, and Z values
+uv run contourer data/zakazka-body.txt --axis-filters '>0,>0,>0'
 
 # Show original data points on the map
 uv run contourer data/zakazka-body.txt --show-points
@@ -72,6 +76,7 @@ uv run contourer data/zakazka-body.txt --web
 **Features:**
 - 🔍 **Zoom & Pan** - Contour lines maintain constant width at any zoom level
 - ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
+- 🧹 **Axis Filters** - Filter X, Y, and Z before triangulation. In the web UI, enter `>0` in all three fields to keep only positive coordinates.
 - 📍 **Show Points** - Toggle original data points visibility
 - 🎨 **Color Schemes** - Switch between Terrain, Viridis, Monochrome, Topographic
 - 🏷️ **Elevation Labels** - Toggle labels on major contours

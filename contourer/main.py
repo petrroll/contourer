@@ -2,6 +2,7 @@ import argparse
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 from typing import Optional
 
 import ezdxf
@@ -30,6 +31,121 @@ class PointCloudLoadSummary:
 class PointCloudLoadResult:
     points: np.ndarray
     summary: PointCloudLoadSummary
+
+
+@dataclass(frozen=True)
+class AxisFilter:
+    axis_name: str
+    operator_symbol: str
+    threshold: float
+
+    @property
+    def expression(self) -> str:
+        return f"{self.operator_symbol}{self.threshold:g}"
+
+
+AXIS_NAMES = ('X', 'Y', 'Z')
+AXIS_FILTER_PATTERN = re.compile(
+    r"^\s*(<=|>=|==|!=|<|>)\s*([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)\s*$"
+)
+AXIS_FILTER_OPERATORS = {
+    '>': np.greater,
+    '>=': np.greater_equal,
+    '<': np.less,
+    '<=': np.less_equal,
+    '==': np.equal,
+    '!=': np.not_equal,
+}
+
+
+def parse_axis_filter(expression: str, axis_name: str) -> Optional[AxisFilter]:
+    stripped = expression.strip()
+    if not stripped:
+        return None
+
+    match = AXIS_FILTER_PATTERN.fullmatch(stripped)
+    if match is None:
+        raise ValueError(
+            f"Invalid {axis_name} axis filter '{expression}'. Use one of >, >=, <, <=, ==, != followed by a number."
+        )
+
+    operator_symbol, threshold_text = match.groups()
+    threshold = float(threshold_text.replace(',', '.'))
+    return AxisFilter(axis_name=axis_name, operator_symbol=operator_symbol, threshold=threshold)
+
+
+def parse_axis_filters(
+    axis_filters_text: Optional[str],
+) -> tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]]:
+    if axis_filters_text is None or not axis_filters_text.strip():
+        return (None, None, None)
+
+    expressions = axis_filters_text.split(',')
+    if len(expressions) != 3:
+        raise ValueError(
+            "Axis filters must contain exactly three comma-separated expressions for X,Y,Z. "
+            "Leave an axis empty to skip it, for example '>0,,>450'."
+        )
+
+    parsed_x, parsed_y, parsed_z = (
+        parse_axis_filter(expression, axis_name)
+        for axis_name, expression in zip(AXIS_NAMES, expressions)
+    )
+    return parsed_x, parsed_y, parsed_z
+
+
+def axis_filters_to_expressions(
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> tuple[str, str, str]:
+    expression_x, expression_y, expression_z = (
+        axis_filter.expression if axis_filter is not None else ''
+        for axis_filter in axis_filters
+    )
+    return expression_x, expression_y, expression_z
+
+
+def normalize_axis_filters(
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> Optional[str]:
+    expressions = axis_filters_to_expressions(axis_filters)
+    if not any(expressions):
+        return None
+    return ','.join(expressions)
+
+
+def describe_axis_filters(
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> str:
+    active_filters = [
+        f"{axis_filter.axis_name}{axis_filter.expression}"
+        for axis_filter in axis_filters
+        if axis_filter is not None
+    ]
+    return ', '.join(active_filters) if active_filters else 'none'
+
+
+def filter_points_by_axis(
+    points: np.ndarray,
+    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
+) -> np.ndarray:
+    if not any(axis_filters):
+        return points
+
+    mask = np.ones(len(points), dtype=bool)
+    for axis_index, axis_filter in enumerate(axis_filters):
+        if axis_filter is None:
+            continue
+        operator = AXIS_FILTER_OPERATORS[axis_filter.operator_symbol]
+        mask &= operator(points[:, axis_index], axis_filter.threshold)
+
+    filtered_points = points[mask]
+    if len(filtered_points) < 3:
+        raise ValueError(
+            f"Axis filters {describe_axis_filters(axis_filters)} kept only {len(filtered_points)} points. "
+            "Need at least 3 points after filtering."
+        )
+
+    return filtered_points
 
 
 def _parse_numeric_token(token: bytes) -> tuple[Optional[float], bool]:
@@ -715,6 +831,15 @@ def main():
         help="Max triangle edge length filter (default: 1.5× median)"
     )
     parser.add_argument(
+        "--axis-filters",
+        type=str,
+        default=None,
+        help=(
+            "Comma-separated X,Y,Z axis filters. Quote the value in your shell, "
+            "for example '>0,>0,>0'. Leave an axis empty to skip it."
+        )
+    )
+    parser.add_argument(
         "--show-points",
         action="store_true",
         help="Show original data points on the visualization"
@@ -738,6 +863,13 @@ def main():
     )
     
     args = parser.parse_args()
+
+    try:
+        axis_filters = parse_axis_filters(args.axis_filters)
+    except ValueError as error:
+        parser.error(str(error))
+
+    normalized_axis_filters = normalize_axis_filters(axis_filters)
     
     # Validate input file
     if not args.file_path.exists():
@@ -753,6 +885,7 @@ def main():
             minor_interval=args.minor_interval,
             major_interval=args.major_interval,
             max_distance=args.max_distance,
+            axis_filters=normalized_axis_filters,
             show_points=args.show_points,
         )
         return 0
@@ -766,6 +899,17 @@ def main():
     load_result = load_point_cloud(args.file_path)
     points = load_result.points
     print_load_summary(load_result.summary)
+
+    if normalized_axis_filters is not None:
+        print(f"\nApplying axis filters: {describe_axis_filters(axis_filters)}")
+        try:
+            filtered_points = filter_points_by_axis(points, axis_filters)
+        except ValueError as error:
+            print(f"Error: {error}")
+            return 1
+
+        print(f"Kept {len(filtered_points)} of {len(points)} loaded points after axis filtering")
+        points = filtered_points
     
     # Print Z statistics
     z_stats = print_z_statistics(points[:, 2])
