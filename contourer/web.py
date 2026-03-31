@@ -2,6 +2,7 @@
 
 import gzip
 import json
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -10,14 +11,8 @@ from flask import Flask, Response, render_template, request
 
 from .main import (
     MapDisplaySettings,
-    axis_filters_to_expressions,
     build_display_transformer,
-    compute_axis_filter_mask,
     load_point_cloud,
-    describe_axis_filters,
-    filter_point_label_data,
-    normalize_axis_filters,
-    parse_axis_filters,
     print_load_summary,
     print_z_statistics,
     create_triangulation_with_filter,
@@ -35,7 +30,6 @@ def create_app(
     initial_minor_interval: Optional[float] = None,
     initial_major_interval: Optional[float] = None,
     initial_max_distance: Optional[float] = None,
-    initial_axis_filters: Optional[str] = None,
     initial_show_points: bool = False,
     initial_show_point_labels: bool = False,
     initial_basemap: str = 'none',
@@ -60,7 +54,6 @@ def create_app(
         'minor_interval': initial_minor_interval,
         'major_interval': initial_major_interval,
         'max_distance': initial_max_distance,
-        'axis_filters': initial_axis_filters,
         'show_points': initial_show_points,
         'show_point_labels': initial_show_point_labels,
         'basemap': initial_map_display_settings.basemap,
@@ -134,13 +127,10 @@ def create_app(
 
     def get_display_xy(
         points: np.ndarray,
-        axis_filters_text: Optional[str],
         map_display_settings: MapDisplaySettings,
     ) -> np.ndarray:
         cache = app.config['CACHE']
-        axis_filters = parse_axis_filters(axis_filters_text)
-        axis_filters_key = normalize_axis_filters(axis_filters) or ''
-        cache_key = ('display-xy', axis_filters_key, map_display_settings.cache_key)
+        cache_key = ('display-xy', map_display_settings.cache_key)
 
         if cache_key not in cache:
             transformer = get_display_transformer(map_display_settings)
@@ -235,41 +225,23 @@ def create_app(
         load_summary = cache.get('load_summary_with_labels', cache['load_summary']) if include_labels else cache['load_summary']
         return cache['raw_points'], point_labels, load_summary
 
-    def get_filtered_data(axis_filters_text: Optional[str] = None, include_labels: bool = False):
-        """Get cached points and statistics for the current axis filters."""
+    def get_filtered_data(include_labels: bool = False):
+        """Get cached points and statistics for the current dataset."""
         raw_points, raw_point_labels, load_summary = get_cached_data(include_labels=include_labels)
-        axis_filters = parse_axis_filters(axis_filters_text)
-        axis_filters_key = normalize_axis_filters(axis_filters) or ''
         cache = app.config['CACHE']
-        cache_key = ('filtered', axis_filters_key)
+        cache_key = 'filtered'
 
         if cache_key not in cache:
-            if axis_filters_key:
-                mask = compute_axis_filter_mask(raw_points, axis_filters)
-                points = raw_points[mask]
-            else:
-                mask = None
-                points = raw_points
-
-            filtered_out_points = len(raw_points) - len(points)
-            z_stats = print_z_statistics(points[:, 2])
+            z_stats = print_z_statistics(raw_points[:, 2])
             selection = {
-                'axis_filters_text': axis_filters_key,
-                'axis_filters': axis_filters_to_expressions(axis_filters),
-                'active_points': len(points),
-                'filtered_out_points': filtered_out_points,
+                'active_points': len(raw_points),
+                'filtered_out_points': 0,
                 'labeled_points': 0,
                 'unique_labels': 0,
-                'description': describe_axis_filters(axis_filters) if axis_filters_key else None,
             }
 
-            if axis_filters_key:
-                print(f"Applying axis filters in web viewer: {selection['description']}")
-                print(f"Kept {selection['active_points']} of {len(raw_points)} loaded points after axis filtering")
-
             cache[cache_key] = {
-                'points': points,
-                'mask': mask,
+                'points': raw_points,
                 'z_stats': z_stats,
                 'selection': selection,
             }
@@ -282,47 +254,39 @@ def create_app(
             if raw_point_labels is None:
                 raise RuntimeError('Point labels were requested but not loaded.')
 
-            label_cache_key = ('filtered-point-labels', axis_filters_key)
-            if label_cache_key not in cache:
-                if filtered['mask'] is None:
-                    cache[label_cache_key] = raw_point_labels
-                else:
-                    cache[label_cache_key] = filter_point_label_data(raw_point_labels, filtered['mask'])
-
-            point_labels = cache[label_cache_key]
+            point_labels = raw_point_labels
             selection['labeled_points'] = point_labels.labeled_points
             selection['unique_labels'] = point_labels.unique_labels
 
         return filtered['points'], point_labels, filtered['z_stats'], load_summary, selection
 
-    def get_requested_axis_filters() -> Optional[str]:
-        return request.args.get(
-            'axis_filters',
-            default=app.config['INITIAL_SETTINGS']['axis_filters'],
-            type=str,
-        )
-    
-    def get_triangulation(max_distance: Optional[float] = None, axis_filters_text: Optional[str] = None):
+    def get_triangulation(max_distance: Optional[float] = None):
         """Get or create triangulation with given max_distance."""
         cache = app.config['CACHE']
-        axis_filters = parse_axis_filters(axis_filters_text)
-        axis_filters_key = normalize_axis_filters(axis_filters) or ''
-        cache_key = ('triangulation', axis_filters_key, max_distance)
+        cache_key = ('triangulation', max_distance)
         
         if cache_key not in cache:
-            points, _, _, _, _ = get_filtered_data(axis_filters_key)
-            print(f"Creating triangulation (max_distance={max_distance}, axis_filters={axis_filters_key or 'none'})...")
+            points, _, _, _, _ = get_filtered_data()
+            print(f"Creating triangulation (max_distance={max_distance})...")
             triangulation, mask = create_triangulation_with_filter(points, max_distance)
             cache[cache_key] = triangulation
         
         return cache[cache_key]
     
+    @app.errorhandler(Exception)
+    def handle_exception(error):
+        """Return JSON error responses for unhandled exceptions."""
+        traceback.print_exc()
+        return make_json_response(
+            {'error': f'{type(error).__name__}: {error}'},
+            status=500,
+        )
+
     @app.route('/')
     def index():
         """Render the main map view."""
         initial = app.config['INITIAL_SETTINGS']
         points, _, z_stats, load_summary, selection = get_filtered_data(
-            initial['axis_filters'],
             include_labels=initial['show_point_labels'],
         )
         initial_map_display_settings = validate_map_display_settings(
@@ -330,8 +294,6 @@ def create_app(
             initial['source_crs'],
             initial['source_axis_order'],
         )
-        initial_axis_filters = parse_axis_filters(initial['axis_filters'])
-        initial_axis_filter_x, initial_axis_filter_y, initial_axis_filter_z = axis_filters_to_expressions(initial_axis_filters)
         return render_template('map.html', 
                                filename=file_path.name,
                                z_min=z_stats['min'],
@@ -339,9 +301,6 @@ def create_app(
                                initial_minor_interval=initial['minor_interval'],
                                initial_major_interval=initial['major_interval'],
                                initial_max_distance=initial['max_distance'],
-                               initial_axis_filter_x=initial_axis_filter_x,
-                               initial_axis_filter_y=initial_axis_filter_y,
-                               initial_axis_filter_z=initial_axis_filter_z,
                                initial_show_points=initial['show_points'],
                                initial_show_point_labels=initial['show_point_labels'],
                                initial_basemap=initial_map_display_settings.basemap,
@@ -355,13 +314,16 @@ def create_app(
     def get_bounds():
         """Get the bounding box of the data."""
         try:
-            axis_filters_text = get_requested_axis_filters()
-            points, _, z_stats, _, selection = get_filtered_data(axis_filters_text)
+            points, _, z_stats, _, selection = get_filtered_data()
             map_display_settings = get_requested_map_display_settings()
         except ValueError as error:
             return make_json_response({'error': str(error)}, status=400)
 
-        display_xy = get_display_xy(points, axis_filters_text, map_display_settings)
+        try:
+            display_xy = get_display_xy(points, map_display_settings)
+        except Exception as error:
+            traceback.print_exc()
+            return make_json_response({'error': f'Coordinate transform failed: {error}'}, status=500)
         x, y = display_xy[:, 0], display_xy[:, 1]
         response = {
             'x_min': float(np.min(x)),
@@ -384,16 +346,14 @@ def create_app(
         include_labels = request.args.get('include_labels', default='false').lower() == 'true'
 
         try:
-            axis_filters_text = get_requested_axis_filters()
             points, point_labels, _, _, selection = get_filtered_data(
-                axis_filters_text,
                 include_labels=include_labels,
             )
             map_display_settings = get_requested_map_display_settings()
-        except ValueError as error:
+        except (ValueError, RuntimeError) as error:
             return make_json_response({'error': str(error)}, status=400)
 
-        display_xy = get_display_xy(points, axis_filters_text, map_display_settings)
+        display_xy = get_display_xy(points, map_display_settings)
         
         features = []
         for i, ((source_x, source_y, z), (display_x, display_y)) in enumerate(zip(points, display_xy)):
@@ -443,10 +403,9 @@ def create_app(
     def get_contours():
         """Generate and return contour lines as GeoJSON."""
         try:
-            axis_filters_text = get_requested_axis_filters()
-            points, _, z_stats, _, selection = get_filtered_data(axis_filters_text)
+            points, _, z_stats, _, selection = get_filtered_data()
             map_display_settings = get_requested_map_display_settings()
-        except ValueError as error:
+        except (ValueError, RuntimeError) as error:
             return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
@@ -456,7 +415,7 @@ def create_app(
         num_levels = request.args.get('num_levels', default=30, type=int)
         
         # Get triangulation
-        triangulation = get_triangulation(max_distance, axis_filters_text)
+        triangulation = get_triangulation(max_distance)
         
         # Generate levels
         if minor_interval:
@@ -516,16 +475,15 @@ def create_app(
     def get_mesh():
         """Get the triangulated mesh data for 3D visualization."""
         try:
-            axis_filters_text = get_requested_axis_filters()
-            points, _, z_stats, _, _ = get_filtered_data(axis_filters_text)
-        except ValueError as error:
+            points, _, z_stats, _, _ = get_filtered_data()
+        except (ValueError, RuntimeError) as error:
             return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
         max_distance = request.args.get('max_distance', type=float)
         
         # Get triangulation
-        triangulation = get_triangulation(max_distance, axis_filters_text)
+        triangulation = get_triangulation(max_distance)
         
         # Get vertices and triangles
         x = triangulation.x.tolist()
@@ -552,12 +510,10 @@ def create_app(
         show_point_labels = request.args.get('show_point_labels', default='false').lower() == 'true'
 
         try:
-            axis_filters_text = get_requested_axis_filters()
             points, point_labels, z_stats, _, _ = get_filtered_data(
-                axis_filters_text,
                 include_labels=show_point_labels,
             )
-        except ValueError as error:
+        except (ValueError, RuntimeError) as error:
             return make_json_response({'error': str(error)}, status=400)
         
         # Get parameters from request
@@ -568,7 +524,7 @@ def create_app(
         show_points = request.args.get('show_points', default='false').lower() == 'true'
         
         # Get triangulation
-        triangulation = get_triangulation(max_distance, axis_filters_text)
+        triangulation = get_triangulation(max_distance)
         
         # Run the shared export workflow
         exported_paths = run_export(
@@ -599,7 +555,6 @@ def run_web_server(
     minor_interval: Optional[float] = None,
     major_interval: Optional[float] = None,
     max_distance: Optional[float] = None,
-    axis_filters: Optional[str] = None,
     show_points: bool = False,
     show_point_labels: bool = False,
     basemap: str = 'none',
@@ -612,7 +567,6 @@ def run_web_server(
         initial_minor_interval=minor_interval,
         initial_major_interval=major_interval,
         initial_max_distance=max_distance,
-        initial_axis_filters=axis_filters,
         initial_show_points=show_points,
         initial_show_point_labels=show_point_labels,
         initial_basemap=basemap,

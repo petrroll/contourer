@@ -6,10 +6,7 @@ from unittest.mock import patch
 import numpy as np
 
 from contourer.main import (
-    build_point_label_data,
-    filter_point_data_by_axis,
     load_point_cloud,
-    parse_axis_filters,
 )
 from contourer.web import create_app
 
@@ -75,41 +72,9 @@ class PointLabelLoadingTests(unittest.TestCase):
         self.assertEqual(point_labels.catalog, ('gate', 'lamp post'))
         self.assertEqual(point_labels.label_ids.tolist(), [0, 0, 1, 0])
 
-    def test_filter_point_data_by_axis_compacts_label_catalog(self):
-        points = np.array(
-            [
-                [-1.0, 0.0, 10.0],
-                [1.0, 0.0, 11.0],
-                [2.0, 0.0, 12.0],
-                [3.0, 0.0, 13.0],
-            ]
-        )
-        point_labels = build_point_label_data(['gate', 'lamp post', 'lamp post', None])
-
-        filtered_points, filtered_labels = filter_point_data_by_axis(
-            points,
-            point_labels,
-            parse_axis_filters('>0.5,,'),
-        )
-
-        assert filtered_labels is not None
-
-        np.testing.assert_allclose(
-            filtered_points,
-            np.array(
-                [
-                    [1.0, 0.0, 11.0],
-                    [2.0, 0.0, 12.0],
-                    [3.0, 0.0, 13.0],
-                ]
-            ),
-        )
-        self.assertEqual(filtered_labels.catalog, ('lamp post',))
-        self.assertEqual(filtered_labels.label_ids.tolist(), [0, 0, -1])
-
 
 class PointLabelApiTests(unittest.TestCase):
-    def test_points_api_exposes_label_catalog_and_compacted_ids(self):
+    def test_points_api_exposes_label_catalog_and_ids(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = Path(temp_dir) / 'api-points.txt'
             file_path.write_text(
@@ -127,26 +92,25 @@ class PointLabelApiTests(unittest.TestCase):
 
             app = create_app(file_path)
             client = app.test_client()
-            response = client.get(
-                '/api/points',
-                query_string={'axis_filters': '>0.5,,', 'include_labels': 'true'},
-            )
+            response = client.get('/api/points', query_string={'include_labels': 'true'})
 
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(
             payload['meta']['label_catalog'],
-            [{'id': 0, 'label': 'lamp post'}],
+            [{'id': 0, 'label': 'gate'}, {'id': 1, 'label': 'lamp post'}],
         )
-        self.assertEqual(payload['meta']['labeled_points'], 2)
-        self.assertEqual(payload['meta']['unique_labels'], 1)
-        self.assertEqual(len(payload['features']), 4)
-        self.assertEqual(payload['features'][0]['properties']['label'], 'lamp post')
+        self.assertEqual(payload['meta']['labeled_points'], 3)
+        self.assertEqual(payload['meta']['unique_labels'], 2)
+        self.assertEqual(len(payload['features']), 5)
+        self.assertEqual(payload['features'][0]['properties']['label'], 'gate')
         self.assertEqual(payload['features'][0]['properties']['label_id'], 0)
         self.assertEqual(payload['features'][1]['properties']['label'], 'lamp post')
-        self.assertEqual(payload['features'][1]['properties']['label_id'], 0)
-        self.assertIsNone(payload['features'][2]['properties']['label'])
-        self.assertIsNone(payload['features'][2]['properties']['label_id'])
+        self.assertEqual(payload['features'][1]['properties']['label_id'], 1)
+        self.assertEqual(payload['features'][1]['properties']['label'], 'lamp post')
+        self.assertEqual(payload['features'][2]['properties']['label_id'], 1)
+        self.assertIsNone(payload['features'][3]['properties']['label'])
+        self.assertIsNone(payload['features'][3]['properties']['label_id'])
 
     def test_points_api_loads_labels_only_when_requested(self):
         with tempfile.TemporaryDirectory() as temp_dir:

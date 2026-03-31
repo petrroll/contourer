@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import importlib
 import json
 from pathlib import Path
-import re
 from typing import Optional
 
 import ezdxf
@@ -60,17 +59,6 @@ class PointCloudLoadResult:
 
 
 @dataclass(frozen=True)
-class AxisFilter:
-    axis_name: str
-    operator_symbol: str
-    threshold: float
-
-    @property
-    def expression(self) -> str:
-        return f"{self.operator_symbol}{self.threshold:g}"
-
-
-@dataclass(frozen=True)
 class MapDisplaySettings:
     basemap: str
     source_crs: Optional[str]
@@ -100,21 +88,9 @@ class MapDisplaySettings:
         )
 
 
-AXIS_NAMES = ('X', 'Y', 'Z')
 MAP_BASEMAP_OPTIONS = ('none', 'osm')
 MAP_SOURCE_AXIS_OPTIONS = ('xy', 'yx')
 DISPLAY_TARGET_CRS = 'EPSG:4326'
-AXIS_FILTER_PATTERN = re.compile(
-    r"^\s*(<=|>=|==|!=|<|>)\s*([+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?)\s*$"
-)
-AXIS_FILTER_OPERATORS = {
-    '>': np.greater,
-    '>=': np.greater_equal,
-    '<': np.less,
-    '<=': np.less_equal,
-    '==': np.equal,
-    '!=': np.not_equal,
-}
 TEXT_DECODINGS = ('utf-8', 'cp1250', 'latin-1')
 
 
@@ -241,104 +217,6 @@ def transform_coordinates_for_display(
     return np.asarray(transformed_x, dtype=float), np.asarray(transformed_y, dtype=float)
 
 
-def parse_axis_filter(expression: str, axis_name: str) -> Optional[AxisFilter]:
-    stripped = expression.strip()
-    if not stripped:
-        return None
-
-    match = AXIS_FILTER_PATTERN.fullmatch(stripped)
-    if match is None:
-        raise ValueError(
-            f"Invalid {axis_name} axis filter '{expression}'. Use one of >, >=, <, <=, ==, != followed by a number."
-        )
-
-    operator_symbol, threshold_text = match.groups()
-    threshold = float(threshold_text.replace(',', '.'))
-    return AxisFilter(axis_name=axis_name, operator_symbol=operator_symbol, threshold=threshold)
-
-
-def parse_axis_filters(
-    axis_filters_text: Optional[str],
-) -> tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]]:
-    if axis_filters_text is None or not axis_filters_text.strip():
-        return (None, None, None)
-
-    expressions = axis_filters_text.split(',')
-    if len(expressions) != 3:
-        raise ValueError(
-            "Axis filters must contain exactly three comma-separated expressions for X,Y,Z. "
-            "Leave an axis empty to skip it, for example '>0,,>450'."
-        )
-
-    parsed_x, parsed_y, parsed_z = (
-        parse_axis_filter(expression, axis_name)
-        for axis_name, expression in zip(AXIS_NAMES, expressions)
-    )
-    return parsed_x, parsed_y, parsed_z
-
-
-def axis_filters_to_expressions(
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> tuple[str, str, str]:
-    expression_x, expression_y, expression_z = (
-        axis_filter.expression if axis_filter is not None else ''
-        for axis_filter in axis_filters
-    )
-    return expression_x, expression_y, expression_z
-
-
-def normalize_axis_filters(
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> Optional[str]:
-    expressions = axis_filters_to_expressions(axis_filters)
-    if not any(expressions):
-        return None
-    return ','.join(expressions)
-
-
-def describe_axis_filters(
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> str:
-    active_filters = [
-        f"{axis_filter.axis_name}{axis_filter.expression}"
-        for axis_filter in axis_filters
-        if axis_filter is not None
-    ]
-    return ', '.join(active_filters) if active_filters else 'none'
-
-
-def filter_points_by_axis(
-    points: np.ndarray,
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> np.ndarray:
-    if not any(axis_filters):
-        return points
-
-    mask = compute_axis_filter_mask(points, axis_filters)
-    return points[mask]
-
-
-def compute_axis_filter_mask(
-    points: np.ndarray,
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> np.ndarray:
-    mask = np.ones(len(points), dtype=bool)
-    for axis_index, axis_filter in enumerate(axis_filters):
-        if axis_filter is None:
-            continue
-        operator = AXIS_FILTER_OPERATORS[axis_filter.operator_symbol]
-        mask &= operator(points[:, axis_index], axis_filter.threshold)
-
-    filtered_points = int(np.count_nonzero(mask))
-    if filtered_points < 3:
-        raise ValueError(
-            f"Axis filters {describe_axis_filters(axis_filters)} kept only {filtered_points} points. "
-            "Need at least 3 points after filtering."
-        )
-
-    return mask
-
-
 def build_point_label_data(point_labels: list[Optional[str]]) -> PointLabelData:
     label_ids = np.full(len(point_labels), -1, dtype=int)
     catalog = []
@@ -358,50 +236,6 @@ def build_point_label_data(point_labels: list[Optional[str]]) -> PointLabelData:
         label_ids[point_index] = label_id
 
     return PointLabelData(label_ids=label_ids, catalog=tuple(catalog))
-
-
-def filter_point_label_data(point_labels: PointLabelData, mask: np.ndarray) -> PointLabelData:
-    if len(point_labels.label_ids) != len(mask):
-        raise ValueError("Point label metadata is not aligned with the selected points.")
-
-    filtered_label_ids = point_labels.label_ids[mask]
-    if filtered_label_ids.size == 0:
-        return PointLabelData(label_ids=filtered_label_ids.astype(int, copy=False), catalog=())
-
-    compacted_label_ids = np.full(len(filtered_label_ids), -1, dtype=int)
-    compacted_catalog = []
-    label_id_remap = {}
-
-    for point_index, label_id in enumerate(filtered_label_ids):
-        label_id = int(label_id)
-        if label_id < 0:
-            continue
-
-        compacted_label_id = label_id_remap.get(label_id)
-        if compacted_label_id is None:
-            compacted_label_id = len(compacted_catalog)
-            label_id_remap[label_id] = compacted_label_id
-            compacted_catalog.append(point_labels.catalog[label_id])
-
-        compacted_label_ids[point_index] = compacted_label_id
-
-    return PointLabelData(label_ids=compacted_label_ids, catalog=tuple(compacted_catalog))
-
-
-def filter_point_data_by_axis(
-    points: np.ndarray,
-    point_labels: Optional[PointLabelData],
-    axis_filters: tuple[Optional[AxisFilter], Optional[AxisFilter], Optional[AxisFilter]],
-) -> tuple[np.ndarray, Optional[PointLabelData]]:
-    if not any(axis_filters):
-        return points, point_labels
-
-    mask = compute_axis_filter_mask(points, axis_filters)
-    filtered_points = points[mask]
-    if point_labels is None:
-        return filtered_points, None
-
-    return filtered_points, filter_point_label_data(point_labels, mask)
 
 
 def _parse_numeric_token(token: bytes) -> tuple[Optional[float], bool]:
@@ -1183,15 +1017,6 @@ def main():
         help="Max triangle edge length filter (default: 1.5× median)"
     )
     parser.add_argument(
-        "--axis-filters",
-        type=str,
-        default=None,
-        help=(
-            "Comma-separated X,Y,Z axis filters. Quote the value in your shell, "
-            "for example '>0,>0,>0'. Leave an axis empty to skip it."
-        )
-    )
-    parser.add_argument(
         "--show-points",
         action="store_true",
         help="Show original data points on the visualization"
@@ -1240,11 +1065,6 @@ def main():
     args = parser.parse_args()
 
     try:
-        axis_filters = parse_axis_filters(args.axis_filters)
-    except ValueError as error:
-        parser.error(str(error))
-
-    try:
         map_display_settings = validate_map_display_settings(
             args.basemap,
             args.source_crs,
@@ -1252,8 +1072,6 @@ def main():
         )
     except ValueError as error:
         parser.error(str(error))
-
-    normalized_axis_filters = normalize_axis_filters(axis_filters)
     
     # Validate input file
     if not args.file_path.exists():
@@ -1269,7 +1087,6 @@ def main():
             minor_interval=args.minor_interval,
             major_interval=args.major_interval,
             max_distance=args.max_distance,
-            axis_filters=normalized_axis_filters,
             show_points=args.show_points,
             show_point_labels=args.show_point_labels,
             basemap=map_display_settings.basemap,
@@ -1295,18 +1112,6 @@ def main():
     points = load_result.points
     point_labels = load_result.point_labels
     print_load_summary(load_result.summary)
-
-    if normalized_axis_filters is not None:
-        print(f"\nApplying axis filters: {describe_axis_filters(axis_filters)}")
-        try:
-            filtered_points, filtered_point_labels = filter_point_data_by_axis(points, point_labels, axis_filters)
-        except ValueError as error:
-            print(f"Error: {error}")
-            return 1
-
-        print(f"Kept {len(filtered_points)} of {len(points)} loaded points after axis filtering")
-        points = filtered_points
-        point_labels = filtered_point_labels
     
     # Print Z statistics
     z_stats = print_z_statistics(points[:, 2])

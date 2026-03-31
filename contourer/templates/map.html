@@ -92,50 +92,50 @@
             border-color: #4caf50;
         }
 
-        .axis-filter-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-
-        .axis-filter-example {
-            margin-top: 8px;
-            padding: 10px;
-            border: 1px solid #e2e2e2;
-            border-radius: 5px;
-            background: #fafafa;
-        }
-
-        .axis-filter-example-title {
-            margin-bottom: 8px;
-            font-size: 0.78em;
-            color: #666;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-        }
-
-        .axis-filter-example-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-
-        .axis-filter-example-value {
-            padding: 10px;
-            border: 1px dashed #c9c9c9;
-            border-radius: 5px;
-            background: #fff;
-            color: #666;
-            text-align: center;
-            font-size: 0.95em;
-        }
-
         .control-hint {
             margin-top: 6px;
             font-size: 0.78em;
             line-height: 1.4;
             color: #777;
+        }
+
+        .basemap-sub-fields {
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-left: 3px solid #4caf50;
+            background: #f9f9f9;
+            border-radius: 0 5px 5px 0;
+            transition: opacity 0.2s, border-color 0.2s;
+        }
+
+        .basemap-sub-fields.disabled {
+            opacity: 0.45;
+            pointer-events: none;
+            border-left-color: #ccc;
+            background: #f5f5f5;
+        }
+
+        .basemap-sub-fields .control-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .validation-error {
+            color: #c62828;
+            font-size: 0.78em;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .validation-error.visible {
+            display: block;
+        }
+
+        input.input-error {
+            border-color: #c62828;
+        }
+
+        input.input-error:focus {
+            border-color: #c62828;
         }
         
         .checkbox-group {
@@ -653,41 +653,25 @@
                         <option value="none" {{ 'selected' if initial_basemap == 'none' else '' }} data-i18n="basemapLocal">Local Coordinates</option>
                         <option value="osm" {{ 'selected' if initial_basemap == 'osm' else '' }} data-i18n="basemapOsm">OpenStreetMap</option>
                     </select>
-                    <div class="control-hint" data-i18n="basemapHelp">OpenStreetMap requires a known source CRS and only affects the 2D web viewer.</div>
-                </div>
+                    <div class="control-hint" data-i18n="basemapHelp">Only affects the 2D web viewer.</div>
 
-                <div class="control-group">
-                    <label for="source-crs" data-i18n="sourceCrs">Source CRS</label>
-                    <input type="text" id="source-crs" value="{{ initial_source_crs }}" placeholder="EPSG:2065" spellcheck="false">
-                    <div class="control-hint" data-i18n="sourceCrsHelp">Examples: EPSG:4326 for longitude/latitude or a projected EPSG code such as EPSG:2065.</div>
-                </div>
+                    <div id="basemap-sub-fields" class="basemap-sub-fields {{ '' if initial_basemap == 'osm' else 'disabled' }}">
+                        <div class="control-group">
+                            <label for="source-crs" data-i18n="sourceCrs">Source CRS</label>
+                            <input type="text" id="source-crs" value="{{ initial_source_crs }}" placeholder="e.g. EPSG:2065" spellcheck="false">
+                            <div id="source-crs-error" class="validation-error" data-i18n="sourceCrsRequired">Source CRS is required when using OpenStreetMap.</div>
+                            <div class="control-hint" data-i18n="sourceCrsHelp">Examples: EPSG:4326 for longitude/latitude or a projected EPSG code such as EPSG:2065.</div>
+                        </div>
 
-                <div class="control-group">
-                    <label for="source-axis-order" data-i18n="sourceAxisOrder">Source Axis Order</label>
-                    <select id="source-axis-order">
-                        <option value="xy" {{ 'selected' if initial_source_axis_order == 'xy' else '' }} data-i18n="sourceAxisOrderXY">X then Y</option>
-                        <option value="yx" {{ 'selected' if initial_source_axis_order == 'yx' else '' }} data-i18n="sourceAxisOrderYX">Y then X</option>
-                    </select>
-                    <div class="control-hint" data-i18n="sourceAxisOrderHelp">Use Y/X when the input file stores coordinates as Y then X instead of X then Y.</div>
-                </div>
-
-                <div class="control-group">
-                    <label data-i18n="axisFilters">Axis Filters (X, Y, Z)</label>
-                    <div class="axis-filter-grid">
-                        <input type="text" id="axis-filter-x" value="{{ initial_axis_filter_x }}" placeholder="" spellcheck="false" aria-label="X axis filter">
-                        <input type="text" id="axis-filter-y" value="{{ initial_axis_filter_y }}" placeholder="" spellcheck="false" aria-label="Y axis filter">
-                        <input type="text" id="axis-filter-z" value="{{ initial_axis_filter_z }}" placeholder="" spellcheck="false" aria-label="Z axis filter">
-                    </div>
-                    <div class="control-hint" data-i18n="axisFiltersHelp">Filters are empty by default, so all values are kept. Use &gt;, &gt;=, &lt;, &lt;=, ==, or != only when you want to limit an axis.</div>
-                    <div class="axis-filter-example" aria-hidden="true">
-                        <div class="axis-filter-example-title" data-i18n="axisFiltersExampleTitle">Example Filled Values</div>
-                        <div class="axis-filter-example-grid">
-                            <div class="axis-filter-example-value">&gt;0</div>
-                            <div class="axis-filter-example-value">&gt;0</div>
-                            <div class="axis-filter-example-value">&gt;0</div>
+                        <div class="control-group">
+                            <label for="source-axis-order" data-i18n="sourceAxisOrder">Source Axis Order</label>
+                            <select id="source-axis-order">
+                                <option value="xy" {{ 'selected' if initial_source_axis_order == 'xy' else '' }} data-i18n="sourceAxisOrderXY">X then Y</option>
+                                <option value="yx" {{ 'selected' if initial_source_axis_order == 'yx' else '' }} data-i18n="sourceAxisOrderYX">Y then X</option>
+                            </select>
+                            <div class="control-hint" data-i18n="sourceAxisOrderHelp">Use Y/X when the input file stores coordinates as Y then X instead of X then Y.</div>
                         </div>
                     </div>
-                    <div class="control-hint" data-i18n="axisFiltersExample">Example: fill all three fields with &gt;0 to keep only positive coordinates.</div>
                 </div>
             </div>
             
@@ -865,18 +849,15 @@
                 basemap: 'Basemap',
                 basemapLocal: 'Local Coordinates',
                 basemapOsm: 'OpenStreetMap',
-                basemapHelp: 'OpenStreetMap requires a known source CRS and only affects the 2D web viewer.',
+                basemapHelp: 'Only affects the 2D web viewer.',
                 sourceCrs: 'Source CRS',
                 sourceCrsHelp: 'Examples: EPSG:4326 for longitude/latitude or a projected EPSG code such as EPSG:2065.',
-                sourceCrsPlaceholder: 'EPSG:2065',
+                sourceCrsPlaceholder: 'e.g. EPSG:2065',
+                sourceCrsRequired: 'Source CRS is required when using OpenStreetMap.',
                 sourceAxisOrder: 'Source Axis Order',
                 sourceAxisOrderXY: 'X then Y',
                 sourceAxisOrderYX: 'Y then X',
                 sourceAxisOrderHelp: 'Use Y/X when the input file stores coordinates as Y then X instead of X then Y.',
-                axisFilters: 'Axis Filters (X, Y, Z)',
-                axisFiltersHelp: 'Filters are empty by default, so all values are kept. Use >, >=, <, <=, ==, or != only when you want to limit an axis.',
-                axisFiltersExampleTitle: 'Example Filled Values',
-                axisFiltersExample: 'Example: fill all three fields with >0 to keep only positive coordinates.',
                 coordXLabel: 'X:',
                 coordYLabel: 'Y:',
                 coordZLabel: 'Z:',
@@ -949,18 +930,15 @@
                 basemap: 'Podkladová mapa',
                 basemapLocal: 'Místní souřadnice',
                 basemapOsm: 'OpenStreetMap',
-                basemapHelp: 'OpenStreetMap vyžaduje známý zdrojový CRS a ovlivňuje jen 2D webové zobrazení.',
+                basemapHelp: 'Ovlivňuje jen 2D webové zobrazení.',
                 sourceCrs: 'Zdrojový CRS',
                 sourceCrsHelp: 'Příklady: EPSG:4326 pro zeměpisné souřadnice nebo projektovaný EPSG kód, například EPSG:2065.',
-                sourceCrsPlaceholder: 'EPSG:2065',
+                sourceCrsPlaceholder: 'např. EPSG:2065',
+                sourceCrsRequired: 'Zdrojový CRS je vyžadován při použití OpenStreetMap.',
                 sourceAxisOrder: 'Pořadí zdrojových os',
                 sourceAxisOrderXY: 'X potom Y',
                 sourceAxisOrderYX: 'Y potom X',
                 sourceAxisOrderHelp: 'Použijte Y/X, pokud vstupní soubor ukládá souřadnice v pořadí Y potom X místo X potom Y.',
-                axisFilters: 'Filtry os (X, Y, Z)',
-                axisFiltersHelp: 'Filtry jsou ve výchozím stavu prázdné, takže se ponechají všechny hodnoty. Operátory >, >=, <, <=, == nebo != použijte jen tehdy, když chcete osu omezit.',
-                axisFiltersExampleTitle: 'Příklad vyplněných hodnot',
-                axisFiltersExample: 'Příklad: vyplňte do všech tří polí >0 a zůstanou jen kladné souřadnice.',
                 coordXLabel: 'X:',
                 coordYLabel: 'Y:',
                 coordZLabel: 'Z:',
@@ -1067,9 +1045,6 @@
                 basemap: document.getElementById('basemap-select').value,
                 sourceCrs: document.getElementById('source-crs').value,
                 sourceAxisOrder: document.getElementById('source-axis-order').value,
-                axisFilterX: document.getElementById('axis-filter-x').value,
-                axisFilterY: document.getElementById('axis-filter-y').value,
-                axisFilterZ: document.getElementById('axis-filter-z').value,
                 showPoints: document.getElementById('show-points').checked,
                 showPointLabels: document.getElementById('show-point-labels').checked,
                 showLabels: document.getElementById('show-labels').checked,
@@ -1100,9 +1075,6 @@
                     if (settings.sourceAxisOrder !== undefined) {
                         document.getElementById('source-axis-order').value = settings.sourceAxisOrder === 'yx' ? 'yx' : 'xy';
                     }
-                    if (settings.axisFilterX !== undefined) document.getElementById('axis-filter-x').value = settings.axisFilterX;
-                    if (settings.axisFilterY !== undefined) document.getElementById('axis-filter-y').value = settings.axisFilterY;
-                    if (settings.axisFilterZ !== undefined) document.getElementById('axis-filter-z').value = settings.axisFilterZ;
                     if (settings.showPoints !== undefined) document.getElementById('show-points').checked = settings.showPoints;
                     if (settings.showPointLabels !== undefined) document.getElementById('show-point-labels').checked = settings.showPointLabels;
                     if (settings.showLabels !== undefined) document.getElementById('show-labels').checked = settings.showLabels;
@@ -1116,16 +1088,35 @@
             }
         }
 
-        function getAxisFiltersValue() {
-            return [
-                document.getElementById('axis-filter-x').value.trim(),
-                document.getElementById('axis-filter-y').value.trim(),
-                document.getElementById('axis-filter-z').value.trim(),
-            ].join(',');
+        function updateBasemapSubFields() {
+            const isOsm = document.getElementById('basemap-select').value === 'osm';
+            const subFields = document.getElementById('basemap-sub-fields');
+            if (isOsm) {
+                subFields.classList.remove('disabled');
+            } else {
+                subFields.classList.add('disabled');
+                // Clear validation error when switching away from OSM
+                document.getElementById('source-crs').classList.remove('input-error');
+                document.getElementById('source-crs-error').classList.remove('visible');
+            }
+            if (isOsm) {
+                validateSourceCrs();
+            }
         }
 
-        function appendAxisFiltersParam(params) {
-            params.set('axis_filters', getAxisFiltersValue());
+        function validateSourceCrs() {
+            const isOsm = document.getElementById('basemap-select').value === 'osm';
+            const crsInput = document.getElementById('source-crs');
+            const errorEl = document.getElementById('source-crs-error');
+            if (isOsm && !crsInput.value.trim()) {
+                crsInput.classList.add('input-error');
+                errorEl.classList.add('visible');
+                return false;
+            } else {
+                crsInput.classList.remove('input-error');
+                errorEl.classList.remove('visible');
+                return true;
+            }
         }
 
         function getMapDisplaySettingsValue() {
@@ -1203,17 +1194,21 @@
                 data = responseText ? JSON.parse(responseText) : null;
             } catch (error) {
                 const responseSnippet = responseText.trim().slice(0, 200);
+                console.error(`fetchJson ${url}: HTTP ${response.status}, invalid JSON:`, responseSnippet);
                 throw new Error(
                     responseSnippet.length > 0
-                        ? `Invalid JSON response: ${responseSnippet}`
-                        : 'Empty JSON response'
+                        ? `Server error (HTTP ${response.status}): ${responseSnippet}`
+                        : `Server error (HTTP ${response.status}): empty response`
                 );
             }
 
             if (!response.ok) {
-                throw new Error((data && data.error) || response.statusText);
+                const errorMessage = (data && data.error) || response.statusText;
+                console.error(`fetchJson ${url}: HTTP ${response.status}:`, errorMessage);
+                throw new Error(errorMessage);
             }
             if (data === null) {
+                console.error(`fetchJson ${url}: empty JSON response`);
                 throw new Error('Empty JSON response');
             }
             return data;
@@ -1316,15 +1311,24 @@
         // Fetch bounds and initialize view
         async function initializeMap(resetView = true) {
             try {
+                // Create/update map immediately from UI state so it's never
+                // null while async operations are in flight.
+                const basemap = document.getElementById('basemap-select').value;
+                const expectedMapMode = basemap === 'osm' ? 'geographic' : 'local';
+                if (!map || mapMode !== expectedMapMode) {
+                    create2DMap(expectedMapMode);
+                    resetView = true;
+                }
+
                 setStatus(t('loadingBounds'), 'loading');
                 const params = new URLSearchParams();
-                appendAxisFiltersParam(params);
                 appendMapDisplayParams(params);
                 const nextBounds = await fetchJson(`/api/bounds?${params}`);
-                const nextMapMode = nextBounds.coordinate_mode === 'geographic' ? 'geographic' : 'local';
 
-                if (!map || mapMode !== nextMapMode) {
-                    create2DMap(nextMapMode);
+                // If server disagrees on mode, recreate the map
+                const serverMapMode = nextBounds.coordinate_mode === 'geographic' ? 'geographic' : 'local';
+                if (mapMode !== serverMapMode) {
+                    create2DMap(serverMapMode);
                     resetView = true;
                 }
 
@@ -1343,12 +1347,18 @@
                 
             } catch (error) {
                 setStatus(t('error', { message: error.message }), 'error');
-                console.error(error);
+                console.error('initializeMap error:', error);
             }
         }
         
         // Update contours based on current settings
         async function updateContours() {
+            if (!map) {
+                console.error('updateContours called but map is not initialized');
+                setStatus(t('error', { message: 'Map not initialized' }), 'error');
+                return false;
+            }
+
             const minorInterval = parseFloat(document.getElementById('minor-interval').value);
             const majorInterval = parseFloat(document.getElementById('major-interval').value);
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
@@ -1360,7 +1370,6 @@
             try {
                 // Build query params
                 const params = new URLSearchParams();
-                appendAxisFiltersParam(params);
                 appendMapDisplayParams(params);
                 if (minorInterval > 0) params.append('minor_interval', minorInterval);
                 if (majorInterval > 0) params.append('major_interval', majorInterval);
@@ -1465,13 +1474,18 @@
                 return true;
             }
 
+            if (!map) {
+                console.error('refreshPointOverlays called but map is not initialized');
+                setStatus(t('error', { message: 'Map not initialized' }), 'error');
+                return false;
+            }
+
             if (updateStatus) {
                 setStatus(t('loadingPoints'), 'loading');
             }
 
             try {
                 const params = new URLSearchParams();
-                appendAxisFiltersParam(params);
                 appendMapDisplayParams(params);
                 if (showPointLabels) {
                     params.set('include_labels', 'true');
@@ -1549,7 +1563,6 @@
             const minorInterval = parseFloat(document.getElementById('minor-interval').value);
             const majorInterval = parseFloat(document.getElementById('major-interval').value);
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
-            const axisFilters = getAxisFiltersValue();
             const showPoints = document.getElementById('show-points').checked;
             const showPointLabels = document.getElementById('show-point-labels').checked;
             const mapDisplaySettings = getMapDisplaySettingsValue();
@@ -1568,9 +1581,6 @@
             }
             if (maxDistance > 0) {
                 cmd += ` --max-distance ${maxDistance}`;
-            }
-            if (axisFilters.replace(/,/g, '').length > 0) {
-                cmd += ` --axis-filters ${quoteShellArgument(axisFilters)}`;
             }
             if (showPoints) {
                 cmd += ' --show-points';
@@ -1645,7 +1655,6 @@
             const showPointLabels = document.getElementById('show-point-labels').checked;
             
             const params = new URLSearchParams();
-            appendAxisFiltersParam(params);
             if (minorInterval > 0) params.set('minor_interval', minorInterval);
             if (majorInterval > 0) params.set('major_interval', majorInterval);
             if (maxDistance > 0) params.set('max_distance', maxDistance);
@@ -1824,7 +1833,6 @@
             
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             const params = new URLSearchParams();
-            appendAxisFiltersParam(params);
             if (maxDistance > 0) params.append('max_distance', maxDistance);
             
             try {
@@ -2093,7 +2101,6 @@
             const maxDistance = parseFloat(document.getElementById('max-distance').value);
             
             const params = new URLSearchParams();
-            appendAxisFiltersParam(params);
             if (minorInterval > 0) params.append('minor_interval', minorInterval);
             if (majorInterval > 0) params.append('major_interval', majorInterval);
             if (maxDistance > 0) params.append('max_distance', maxDistance);
@@ -2350,14 +2357,19 @@
             await refreshPointOverlays();
         });
         document.getElementById('basemap-select').addEventListener('change', async () => {
+            updateBasemapSubFields();
             saveSettings();
             updateCommandLine();
             await initializeMap();
         });
         document.getElementById('source-crs').addEventListener('change', async () => {
+            validateSourceCrs();
             saveSettings();
             updateCommandLine();
             await initializeMap();
+        });
+        document.getElementById('source-crs').addEventListener('input', () => {
+            validateSourceCrs();
         });
         document.getElementById('source-axis-order').addEventListener('change', async () => {
             saveSettings();
@@ -2406,18 +2418,6 @@
             saveSettings();
             updateCommandLine();
         });
-        document.getElementById('axis-filter-x').addEventListener('change', () => {
-            saveSettings();
-            updateCommandLine();
-        });
-        document.getElementById('axis-filter-y').addEventListener('change', () => {
-            saveSettings();
-            updateCommandLine();
-        });
-        document.getElementById('axis-filter-z').addEventListener('change', () => {
-            saveSettings();
-            updateCommandLine();
-        });
         document.getElementById('max-distance').addEventListener('change', () => {
             saveSettings();
             updateCommandLine();
@@ -2426,6 +2426,7 @@
         
         // Initialize: load settings and language, then initialize map
         loadSettings();
+        updateBasemapSubFields();
         loadLanguage();
         updateCommandLine();
         initializeMap();

@@ -29,7 +29,6 @@ By default, all formats are exported. Use `--formats` to select specific formats
 | `--basemap osm` | 2D web viewer basemap. Use `none` for the current local-coordinate view or `osm` for OpenStreetMap. |
 | `--source-crs EPSG:2065` | Known source CRS for 2D web map reprojection. Required when using `--basemap osm`. |
 | `--source-axis-order yx` | Axis order of the source coordinates in the input file: `xy` or `yx`. Use `yx` when the file stores coordinates as `Y X Z`. |
-| `--axis-filters '>0,>0,>0'` | Comma-separated X,Y,Z filters. Quote the value so your shell does not treat `>` as redirection. Leave an axis empty to skip it, for example `'>0,,>450'`. |
 | `--formats pdf,vrs,...` | Comma-separated export formats: pdf, vrs, geojson, dxf (default: all) |
 | `--show-points` | Show original data points on the visualization |
 | `--show-point-labels` | Show parsed point labels in the PDF export and start the web viewer with point labels enabled |
@@ -50,9 +49,6 @@ uv run contourer data/zakazka-body.txt --formats dxf
 
 # Major and minor contours at 0.2 and 1 meter
 uv run contourer data/zakazka-body.txt --minor-interval 0.2 --major-interval 1
-
-# Keep only points with positive X, Y, and Z values
-uv run contourer data/zakazka-body.txt --axis-filters '>0,>0,>0'
 
 # Show original data points on the map
 uv run contourer data/zakazka-body.txt --show-points
@@ -90,7 +86,6 @@ uv run contourer data/zakazka-body.txt --web
 - 🔍 **Zoom & Pan** - Contour lines maintain constant width at any zoom level
 - ⚙️ **Live Settings** - Adjust minor/major intervals and regenerate on the fly
 - 🗺️ **Optional OSM Underlay** - Switch the 2D map between local coordinates and OpenStreetMap when you know the source CRS
-- 🧹 **Axis Filters** - Filter X, Y, and Z before triangulation. In the web UI, enter `>0` in all three fields to keep only positive coordinates.
 - 📍 **Show Points** - Toggle original data points visibility
 - 🏷️ **Show Point Labels** - Toggle parsed point labels independently from point markers
 - 🎨 **Color Schemes** - Switch between Terrain, Viridis, Monochrome, Topographic
